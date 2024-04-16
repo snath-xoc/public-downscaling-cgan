@@ -182,6 +182,10 @@ def write_data(year,
 
     # split TFRecords by lead time, in case this is useful for training on subsets of lead time
     for time_idx in range(28):
+
+        if time_idx>0:
+            break
+            
         print(f"Doing time index {time_idx}")
         s_hour = time_idx*HOURS
         e_hour = (time_idx + 1)*HOURS
