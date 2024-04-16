@@ -3,7 +3,7 @@ import os
 import sys
 import yaml
 
-import tensorflow as tf
+#import tensorflow as tf
 
 
 def read_config():

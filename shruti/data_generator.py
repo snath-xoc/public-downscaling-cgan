@@ -67,12 +67,12 @@ class DataGenerator(Sequence):
         temp_dates = np.array(dates)
 
         # represent valid lead-time intervals, 0 = 0-6 hours, 1 = 6-12 hours, 2 = 12-18 hours etc
-        temp_time_idxs = np.arange(start_hour//HOURS, end_hour//HOURS)
+        #temp_time_idxs = np.arange(start_hour//HOURS, end_hour//HOURS)
 
         # if no shuffle, the DataGenerator will return each interval from the
         # first date, then each interval from the second date, etc.
-        self.dates = np.repeat(temp_dates, len(temp_time_idxs))
-        self.time_idxs = np.tile(temp_time_idxs, len(temp_dates))
+        self.dates = temp_dates#np.repeat(temp_dates, len(temp_time_idxs))
+        #self.time_idxs = np.tile(temp_time_idxs, len(temp_dates))
 
         if self.shuffle:
             rng = np.random.default_rng(seed)
@@ -91,7 +91,7 @@ class DataGenerator(Sequence):
     def __getitem__(self, idx):
         # Get batch at index idx
         dates_batch = self.dates[idx*self.batch_size:(idx+1)*self.batch_size]
-        time_idx_batch = self.time_idxs[idx*self.batch_size:(idx+1)*self.batch_size]
+        time_idx_batch = [0,1]#self.time_idxs[idx*self.batch_size:(idx+1)*self.batch_size]
 
         # Load and return this batch of data
         data_x_batch, data_y_batch, data_mask_batch = load_fcst_truth_batch(
@@ -99,7 +99,7 @@ class DataGenerator(Sequence):
             time_idx_batch,
             fcst_fields=self.fcst_fields,
             log_precip=self.log_precip,
-            norm=self.fcst_norm)
+            norm=self.fcst_norm) ## note time_idx_batch is anyways redundant now in load_fcst_truth_batch
 
         if self.autocoarsen:
             # replace forecast data by coarsened truth data!
