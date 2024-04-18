@@ -15,7 +15,7 @@ from wloss import wasserstein_loss, CL_chooser
 class WGANGP(object):
 
     def __init__(self, gen, disc, mode, gradient_penalty_weight=10,
-                 lr_disc=0.0001, lr_gen=0.0001, avg_seed=None,
+                 lr_disc=0.01, lr_gen=0.01, avg_seed=None,
                  kl_weight=None, ensemble_size=None, CLtype=None,
                  content_loss_weight=None):
 

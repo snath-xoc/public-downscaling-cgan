@@ -6,8 +6,8 @@ import datetime
 import pickle
 import numpy as np
 
-from kerchunk.zarr import ZarrToZarr
-from kerchunk.combine import MultiZarrToZarr
+#from kerchunk.zarr import ZarrToZarr
+#from kerchunk.combine import MultiZarrToZarr
 import numpy as np
 import netCDF4 as nc
 import xarray as xr
@@ -57,7 +57,7 @@ all_fcst_levels = {'Convective available potential energy':'surface',
     'V component of wind': 'isobaricInhPa'}
 
 
-accumulated_fields = ['ssr']#['Convective precipitation (water)', 'ssr', 'Total Precipitation']
+accumulated_fields = ['Convective precipitation (water)', 'ssr', 'Total Precipitation']
 nonnegative_fields = ['Convective available potential energy', 
                       'Convective precipitation (water)', 
                       'Medium cloud cover', 'Surface pressure', 'Upward short-wave radiation flux', 
@@ -108,19 +108,20 @@ lon_reg_b = np.array([19.  , 19.25, 19.5 , 19.75, 20.  , 20.25, 20.5 , 20.75, 21
        52.75, 53.  , 53.25, 53.5 , 53.75, 54.  , 54.25, 54.5, 54.75])-0.125
 lon_reg = 0.5*(lon_reg_b[1:]+lon_reg_b[:-1])
 
-data_path = glob.glob(TRUTH_PATH+"*.nc4")
+data_path = glob.glob(TRUTH_PATH+"*.nc")
 
 ds = xr.open_mfdataset(data_path[0])
 #print(ds)
 
-lat_reg_IMERG = ds.lat.values
-lon_reg_IMERG = ds.lon.values
+lat_reg_IMERG = ds.latitude.values
+lon_reg_IMERG = ds.longitude.values
 
 lat_reg_IMERG_b = np.append((lat_reg_IMERG-0.05), lat_reg_IMERG[-1]+0.05)
 #print(lat_reg_IMERG_b)
 lon_reg_IMERG_b = np.append((lon_reg_IMERG-0.05), lon_reg_IMERG[-1]+0.05)
 #print(lon_reg_IMERG_b)
 # utility function; generator to iterate over a range of dates
+
 def daterange(start_date, end_date):
     for n in range(int((end_date - start_date).days)):
         yield start_date + datetime.timedelta(days=n)
@@ -155,7 +156,7 @@ def get_dates(year,
         end_hour (int): Lead time of last forecast desired
     '''
     # sanity checks for our dataset
-    assert year in (2018, 2019, 2020, 2021)
+    assert year in (2018, 2019, 2020, 2021, 2022)
     assert start_hour >= 0
     assert end_hour <= 168
     assert start_hour % HOURS == 0
@@ -171,16 +172,17 @@ def get_dates(year,
         test_file = f"gfs{datestr}_t00z_f030_f054_V-component-of-wind_isobaricInhPa.zarr"
 
         datestr_true = (curdate + datetime.timedelta(days=1)).strftime('%Y%m%d')
-        for hr in range(0, 24, HOURS):
-            fname = f"{datestr}_{hr:02}"
-            if os.path.exists(os.path.join(TRUTH_PATH, f"{fname}.nc4")) and\
+        for hr in [6]:
+            fname = f"{datestr_true}_{hr:02}"
+            #print(os.path.join(FCST_PATH, test_file))
+            if os.path.exists(os.path.join(TRUTH_PATH, f"{fname}.nc")) and\
             os.path.exists(os.path.join(FCST_PATH, test_file)):
                 truth_cache.add(fname)
 
     # Now work out which IFS start dates to use. For each candidate start date,
     # work out which truth dates+times are needed, and check if they exist.
-    start_date = datetime.date(year, 1, 1)
-    end_date = datetime.date(year+1, 1, 1)
+    #start_date = datetime.date(year, 1, 1)
+    #end_date = datetime.date(year+1, 1, 1)
     valid_dates = []
 
     for curdate in daterange(start_date, end_date):
@@ -189,16 +191,18 @@ def get_dates(year,
         # inclusion in a Python set, and never hitting the disk
         valid = True
 
-        for hr in range(start_hour, end_hour, HOURS):
+        for hr in [24]:#range(start_hour, end_hour, HOURS)
             # implicitly assumes 00Z forecasts; needs editing for 12Z
-            truth_dt = curdate + datetime.timedelta(hours=hr)
+            truth_dt = curdate + datetime.timedelta(days=1)
             # this works for our specific naming convention, where e.g.,
             # 20190204_06 contains the truth data for hours 06-12 on date 20190204
-            if truth_dt.strftime('%Y%m%d_%H') not in truth_cache:
+            #print(truth_dt.strftime('%Y%m%d_%H'))
+            if truth_dt.strftime('%Y%m%d_%H').replace('00','06') not in truth_cache:
                 valid = False
                 break
         if valid:
             datestr = curdate.strftime('%Y%m%d')
+            #print(datestr)
             valid_dates.append(datestr)
 
     return valid_dates
@@ -220,10 +224,12 @@ def load_truth_and_mask(date,
     valid_dt = fcst_date + datetime.timedelta(days=1)
     
     fname = valid_dt.strftime('%Y%m%d')
-    data_path = glob.glob(TRUTH_PATH+f"{fname}_*.nc4")
+    data_path = glob.glob(TRUTH_PATH+f"{fname}_*.nc")
     #print(data_path)
-    ds = xr.concat([xr.open_dataset(dataset).expand_dims(dim={'time':i}, axis=0) for i,dataset in enumerate(data_path)],dim='time').sum('time')
-    da = ds["precipitationCal"]
+    #ds = xr.concat([xr.open_dataset(dataset).expand_dims(dim={'time':i}, axis=0) for i,dataset in enumerate(data_path)],dim='time').mean('time')
+    ds = xr.open_dataset(data_path[0])
+    
+    da = ds["precipitation"]
     y = da.values
     ds.close()
 
@@ -295,7 +301,7 @@ def load_fcst(field,
         - instantaneous fields: mean and stdev at the start of the interval, mean and stdev at the end of the interval
         - accumulated field: mean and stdev of increment over the interval, and the last two channels are all 0
     '''
-
+    
     yearstr = date[:4]
     year = int(yearstr)
     #ds_path = os.path.join(FCST_PATH, yearstr, f"{field}.nc")
@@ -312,7 +318,7 @@ def load_fcst(field,
         if field=='Medium cloud cover':
             return np.zeros([384, 352, 4])
         else:
-            print(field)
+            #print(field)
             return np.zeros([384, 352, 4])
 
     if all_fcst_levels[field]=='isobaricInhPa':
@@ -416,7 +422,7 @@ def load_fcst(field,
             data/=fcst_norm[field]["max"]
             
             data = np.moveaxis(regridder(np.moveaxis(data,-1,0)),0,-1)
-            print(data.shape)
+            #print(data.shape)
             
             return data
         
@@ -447,7 +453,7 @@ def load_fcst_stack(fields,
     '''
     field_arrays = []
     for f in fields:
-        print(f)
+        #print(f)
         field_arrays.append(load_fcst(f, date, time_idx, log_precip=log_precip, norm=norm))
     return np.concatenate(field_arrays, axis=-1)
 

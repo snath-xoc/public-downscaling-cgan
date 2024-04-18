@@ -118,11 +118,11 @@ class DataGenerator(Sequence):
                     "mask": data_mask_batch}
 
     def shuffle_data(self, rng):
-        assert len(self.time_idxs) == len(self.dates)
+        #assert len(self.time_idxs) == len(self.dates)
         # shuffle both dates and time index arrays the same way
         p = rng.permutation(len(self.dates))
         self.dates = self.dates[p]
-        self.time_idxs = self.time_idxs[p]
+        #self.time_idxs = self.time_idxs[p]
 
     def on_epoch_end(self):
         if self.shuffle:

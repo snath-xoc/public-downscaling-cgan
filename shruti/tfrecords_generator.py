@@ -1,6 +1,7 @@
 import glob
 import os
 import random
+from tqdm import tqdm
 
 import numpy as np
 import tensorflow as tf
@@ -164,7 +165,7 @@ def write_data(year,
                log_precip=True,
                fcst_norm=True):
     from data_generator import DataGenerator as DataGeneratorFull
-    assert isinstance(year, int)
+    #assert isinstance(year, int)
 
     # change this to your forecast image size!
     img_size_h = 384
@@ -192,6 +193,8 @@ def write_data(year,
         dates = get_dates(year,
                           start_hour=s_hour,
                           end_hour=e_hour)
+
+        #print(dates)
         dgc = DataGeneratorFull(dates,
                                 fcst_fields=fcst_fields,
                                 start_hour=s_hour,
@@ -209,7 +212,7 @@ def write_data(year,
             options = tf.io.TFRecordOptions(compression_type="GZIP")
             fle_hdles.append(tf.io.TFRecordWriter(flename, options=options))
 
-        for batch in range(len(dgc)):
+        for batch in tqdm(range(len(dgc))):
             if (batch % 10) == 0:
                 print(time_idx, batch)
             sample = dgc.__getitem__(batch)
