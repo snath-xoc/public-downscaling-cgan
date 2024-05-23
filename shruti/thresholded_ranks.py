@@ -8,7 +8,7 @@ class Rootfn:
         self.freq = freq
 
     def f(self, x):
-        return self.freq - np.sum(self.array > x)/self.array.size
+        return self.freq - np.sum(self.array > x) / self.array.size
 
 
 def findthresh(array, freq):

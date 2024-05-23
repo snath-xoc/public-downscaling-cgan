@@ -2,11 +2,14 @@ import argparse
 import gc
 import json
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # suppress TF debug message spam in v2.12
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress TF debug message spam in v2.12
 import yaml
 from pathlib import Path
 
-import matplotlib; matplotlib.use("Agg")  # noqa: E702
+import matplotlib
+
+matplotlib.use("Agg")  # noqa: E702
 import numpy as np
 import pandas as pd
 
@@ -17,6 +20,8 @@ import read_config
 import setupdata
 import setupmodel
 import train
+from xarray_batcher import get_fcst_and_truth as gfat
+from xarray_batcher.batcher import zarr_store_loader, batch_from_zarr_store
 
 
 if __name__ == "__main__":
@@ -26,25 +31,49 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="Path to configuration file")
     parser.set_defaults(do_training=True)
-    parser.add_argument('--no_train', dest='do_training', action='store_false',
-                        help="Do NOT carry out training, only perform eval")
-    parser.add_argument('--restart', dest='restart', action='store_true',
-                        help="Restart training from latest checkpoint")
+    parser.add_argument(
+        "--no_train",
+        dest="do_training",
+        action="store_false",
+        help="Do NOT carry out training, only perform eval",
+    )
+    parser.add_argument(
+        "--restart",
+        dest="restart",
+        action="store_true",
+        help="Restart training from latest checkpoint",
+    )
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--eval_full', dest='evalnum', action='store_const', const="full")
-    group.add_argument('--eval_short', dest='evalnum', action='store_const', const="short")
-    group.add_argument('--eval_blitz', dest='evalnum', action='store_const', const="blitz")
+    group.add_argument(
+        "--eval_full", dest="evalnum", action="store_const", const="full"
+    )
+    group.add_argument(
+        "--eval_short", dest="evalnum", action="store_const", const="short"
+    )
+    group.add_argument(
+        "--eval_blitz", dest="evalnum", action="store_const", const="blitz"
+    )
     parser.set_defaults(evalnum=None)
     parser.set_defaults(evaluate=False)
     parser.set_defaults(plot_ranks=False)
-    parser.add_argument('--evaluate', dest='evaluate', action='store_true',
-                        help="Include evaluation on full-size images")
-    parser.add_argument('--plot_ranks', dest='plot_ranks', action='store_true',
-                        help="Plot rank histograms")
+    parser.add_argument(
+        "--evaluate",
+        dest="evaluate",
+        action="store_true",
+        help="Include evaluation on full-size images",
+    )
+    parser.add_argument(
+        "--plot_ranks",
+        dest="plot_ranks",
+        action="store_true",
+        help="Plot rank histograms",
+    )
     args = parser.parse_args()
 
     if args.evaluate and args.evalnum is None:
-        raise RuntimeError("You asked for evaluation to occur, but did not pass in '--eval_full', '--eval_short', or '--eval_blitz' to specify length of evaluation")
+        raise RuntimeError(
+            "You asked for evaluation to occur, but did not pass in '--eval_full', '--eval_short', or '--eval_blitz' to specify length of evaluation"
+        )
 
     # Read in the configurations
     if args.config is not None:
@@ -52,7 +81,7 @@ if __name__ == "__main__":
     else:
         raise Exception("Please specify configuration!")
 
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         try:
             setup_params = yaml.safe_load(f)
             # print(setup_params)
@@ -95,15 +124,17 @@ if __name__ == "__main__":
     noise_factor = float(noise_factor)
     content_loss_weight = float(content_loss_weight)
 
-    if mode not in ['GAN', 'VAEGAN', 'det']:
+    if mode not in ["GAN", "VAEGAN", "det"]:
         raise ValueError("Mode type is restricted to 'GAN' 'VAEGAN' 'det'")
-    if problem_type not in ['normal', 'autocoarsen']:
+    if problem_type not in ["normal", "autocoarsen"]:
         raise ValueError("Problem type is restricted to 'normal' 'autocoarsen'")
     if ensemble_size is not None:
         if CLtype not in ["CRPS", "CRPS_phys", "ensmeanMSE", "ensmeanMSE_phys"]:
-            raise ValueError("Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'")
+            raise ValueError(
+                "Content loss type is restricted to 'CRPS', 'CRPS_phys', 'ensmeanMSE', 'ensmeanMSE_phys'"
+            )
 
-    num_checkpoints = int(num_samples/(steps_per_checkpoint * batch_size))
+    num_checkpoints = int(num_samples / (steps_per_checkpoint * batch_size))
     checkpoint = 1
 
     # create log folder and model save/load subfolder if they don't exist
@@ -112,13 +143,13 @@ if __name__ == "__main__":
     Path(model_weights_root).mkdir(parents=True, exist_ok=True)
 
     # save setup parameters
-    save_config = os.path.join(log_folder, 'setup_params.yaml')
-    with open(save_config, 'w') as outfile:
+    save_config = os.path.join(log_folder, "setup_params.yaml")
+    with open(save_config, "w") as outfile:
         yaml.dump(setup_params, outfile, default_flow_style=False)
 
     if problem_type == "normal":
         autocoarsen = False
-        input_channels = 4*len(data.all_fcst_fields)
+        input_channels = 4 * len(data.all_fcst_fields)
     elif problem_type == "autocoarsen":
         autocoarsen = True
         input_channels = 1
@@ -146,19 +177,32 @@ if __name__ == "__main__":
             kl_weight=kl_weight,
             ensemble_size=ensemble_size,
             CLtype=CLtype,
-            content_loss_weight=content_loss_weight)
+            content_loss_weight=content_loss_weight,
+        )
 
-        batch_gen_train, data_gen_valid = setupdata.setup_data(
-            train_years=train_years,
-            val_years=val_years,
-            autocoarsen=autocoarsen,
-            weights=training_weights,
-            batch_size=batch_size)
+        # print(train_years, val_years)
+        # batch_gen_train, data_gen_valid = setupdata.setup_data(
+        #    train_years=train_years,
+        #    val_years=val_years,
+        #    autocoarsen=autocoarsen,
+        #    weights=training_weights,
+        #    batch_size=batch_size)
+        df_vars, df_truth, df_constants = gfat.get_all(train_years, generator=True)
+        df_vars_val, df_truth_val, df_constants_val = gfat.get_all(
+            val_years, generator=True
+        )
 
+        batch_gen_train = iter(zarr_store_loader(df_vars, df_truth, df_constants))
+        data_gen_valid = iter(
+            batch_from_zarr_store(
+                df_vars_val, df_truth_val, df_constants_val, batch_size=1, full=True
+            )
+        )
+
+        # print(batch_gen_train)
         if args.restart:  # load weights and run status
-
             model.load(model.filenames_from_root(model_weights_root))
-            with open(os.path.join(log_folder, "run_status.json"), 'r') as f:
+            with open(os.path.join(log_folder, "run_status.json"), "r") as f:
                 run_status = json.load(f)
             training_samples = run_status["training_samples"]
             checkpoint = int(training_samples / (steps_per_checkpoint * batch_size)) + 1
@@ -180,16 +224,18 @@ if __name__ == "__main__":
             print(f"Checkpoint {checkpoint}/{num_checkpoints}")
 
             # train for some number of batches
-            loss_log = train.train_model(model=model,
-                                         mode=mode,
-                                         batch_gen_train=batch_gen_train,
-                                         data_gen_valid=data_gen_valid,
-                                         noise_channels=noise_channels,
-                                         latent_variables=latent_variables,
-                                         checkpoint=checkpoint,
-                                         steps_per_checkpoint=steps_per_checkpoint,
-                                         num_cases=val_size,
-                                         plot_fn=plot_fname)
+            loss_log = train.train_model(
+                model=model,
+                mode=mode,
+                batch_gen_train=batch_gen_train,
+                data_gen_valid=data_gen_valid,
+                noise_channels=noise_channels,
+                latent_variables=latent_variables,
+                checkpoint=checkpoint,
+                steps_per_checkpoint=steps_per_checkpoint,
+                num_cases=val_size,
+                plot_fn=plot_fname,
+            )
 
             training_samples += steps_per_checkpoint * batch_size
             checkpoint += 1
@@ -199,7 +245,7 @@ if __name__ == "__main__":
             run_status = {
                 "training_samples": training_samples,
             }
-            with open(os.path.join(log_folder, "run_status.json"), 'w') as f:
+            with open(os.path.join(log_folder, "run_status.json"), "w") as f:
                 json.dump(run_status, f)
 
             data = {"training_samples": [training_samples]}
@@ -211,7 +257,9 @@ if __name__ == "__main__":
             log.to_csv(log_file, index=False, float_format="%.6f")
 
             # Save model weights each checkpoint
-            gen_weights_file = os.path.join(model_weights_root, f"gen_weights-{training_samples:07d}.h5")
+            gen_weights_file = os.path.join(
+                model_weights_root, f"gen_weights-{training_samples:07d}.h5"
+            )
             model.gen.save_weights(gen_weights_file)
 
     else:
@@ -225,38 +273,48 @@ if __name__ == "__main__":
     interval = steps_per_checkpoint * batch_size
     finalchkpt = num_samples // interval
     # last 4 checkpoints, or all checkpoints if < 4
-    ranks_to_save = [(finalchkpt - ii)*interval for ii in range(3, -1, -1)] if finalchkpt >= 4 else [ii*interval for ii in range(1, finalchkpt+1)]
+    ranks_to_save = (
+        [(finalchkpt - ii) * interval for ii in range(3, -1, -1)]
+        if finalchkpt >= 4
+        else [ii * interval for ii in range(1, finalchkpt + 1)]
+    )
 
     if args.evalnum == "blitz":
-        model_numbers = ranks_to_save.copy()  # should not be modifying list in-place, but just in case!
+        model_numbers = (
+            ranks_to_save.copy()
+        )  # should not be modifying list in-place, but just in case!
     elif args.evalnum == "short":
         # last 1/3rd of checkpoints
         Neval = max(finalchkpt // 3, 1)
-        model_numbers = [(finalchkpt - ii)*interval for ii in range((Neval-1), -1, -1)]
+        model_numbers = [
+            (finalchkpt - ii) * interval for ii in range((Neval - 1), -1, -1)
+        ]
     elif args.evalnum == "full":
         model_numbers = np.arange(0, num_samples + 1, interval)[1:].tolist()
 
     # evaluate model performance
     if args.evaluate:
-        evaluation.evaluate_multiple_checkpoints(mode=mode,
-                                                 arch=arch,
-                                                 val_years=val_years,
-                                                 log_fname=eval_fname,
-                                                 weights_dir=model_weights_root,
-                                                 autocoarsen=autocoarsen,
-                                                 add_noise=add_noise,
-                                                 noise_factor=noise_factor,
-                                                 model_numbers=model_numbers,
-                                                 ranks_to_save=ranks_to_save,
-                                                 num_images=num_images,
-                                                 filters_gen=filters_gen,
-                                                 filters_disc=filters_disc,
-                                                 input_channels=input_channels,
-                                                 constant_fields=constant_fields,
-                                                 latent_variables=latent_variables,
-                                                 noise_channels=noise_channels,
-                                                 padding=padding,
-                                                 ensemble_size=10)
+        evaluation.evaluate_multiple_checkpoints(
+            mode=mode,
+            arch=arch,
+            val_years=val_years,
+            log_fname=eval_fname,
+            weights_dir=model_weights_root,
+            autocoarsen=autocoarsen,
+            add_noise=add_noise,
+            noise_factor=noise_factor,
+            model_numbers=model_numbers,
+            ranks_to_save=ranks_to_save,
+            num_images=num_images,
+            filters_gen=filters_gen,
+            filters_disc=filters_disc,
+            input_channels=input_channels,
+            constant_fields=constant_fields,
+            latent_variables=latent_variables,
+            noise_channels=noise_channels,
+            padding=padding,
+            ensemble_size=10,
+        )
 
     if args.plot_ranks:
         plots.plot_histograms(log_folder, val_years, ranks=ranks_to_save, N_ranks=11)

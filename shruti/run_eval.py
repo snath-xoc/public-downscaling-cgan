@@ -1,7 +1,9 @@
 import os
 import yaml
 
-import matplotlib; matplotlib.use("Agg")  # noqa
+import matplotlib
+
+matplotlib.use("Agg")  # noqa
 
 import data
 import evaluation
@@ -10,12 +12,13 @@ import read_config
 read_config.set_gpu_mode()  # set up whether to use GPU, and mem alloc mode
 
 # input parameters
-log_folder = '/ppdata/andrew-output/ICPAC-ensmeansd'; model_numbers = [153600]  # noqa: E702
+log_folder = "/ppdata/andrew-output/ICPAC-ensmeansd"
+model_numbers = [153600]  # noqa: E702
 val_years = 2020
 
 model_weights_root = os.path.join(log_folder, "models")
-config_path = os.path.join(log_folder, 'setup_params.yaml')
-with open(config_path, 'r') as f:
+config_path = os.path.join(log_folder, "setup_params.yaml")
+with open(config_path, "r") as f:
     try:
         setup_params = yaml.safe_load(f)
     except yaml.YAMLError as exc:
@@ -37,10 +40,10 @@ avg_pooling = setup_params["EVAL"]["avg_pooling"]
 constant_fields = 2
 num_images = 256
 
-if problem_type == 'normal':
-    input_channels = 4*len(data.all_fcst_fields)
+if problem_type == "normal":
+    input_channels = 4 * len(data.all_fcst_fields)
     autocoarsen = False
-elif problem_type == 'autocoarsen':
+elif problem_type == "autocoarsen":
     input_channels = 1
     autocoarsen = True
 
@@ -51,22 +54,24 @@ elif mode == "det":
 
 out_fn = os.path.join(log_folder, f"eval_{val_years}.txt")
 
-evaluation.evaluate_multiple_checkpoints(mode=mode,
-                                         arch=arch,
-                                         val_years=val_years,
-                                         log_fname=out_fn,
-                                         weights_dir=model_weights_root,
-                                         autocoarsen=autocoarsen,
-                                         add_noise=add_noise,
-                                         noise_factor=noise_factor,
-                                         model_numbers=model_numbers,
-                                         ranks_to_save=model_numbers,
-                                         num_images=num_images,
-                                         filters_gen=filters_gen,
-                                         filters_disc=filters_disc,
-                                         input_channels=input_channels,
-                                         constant_fields=constant_fields,
-                                         latent_variables=latent_variables,
-                                         noise_channels=noise_channels,
-                                         padding=padding,
-                                         ensemble_size=ensemble_size)
+evaluation.evaluate_multiple_checkpoints(
+    mode=mode,
+    arch=arch,
+    val_years=val_years,
+    log_fname=out_fn,
+    weights_dir=model_weights_root,
+    autocoarsen=autocoarsen,
+    add_noise=add_noise,
+    noise_factor=noise_factor,
+    model_numbers=model_numbers,
+    ranks_to_save=model_numbers,
+    num_images=num_images,
+    filters_gen=filters_gen,
+    filters_disc=filters_disc,
+    input_channels=input_channels,
+    constant_fields=constant_fields,
+    latent_variables=latent_variables,
+    noise_channels=noise_channels,
+    padding=padding,
+    ensemble_size=ensemble_size,
+)

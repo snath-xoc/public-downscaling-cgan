@@ -46,22 +46,23 @@ from noise import NoiseGenerator
 from read_config import read_downscaling_factor
 
 
-def plot_fss_curves(*,
-                    mode,
-                    arch,
-                    log_folder,
-                    weights_dir,
-                    model_numbers,
-                    problem_type,
-                    filters_gen,
-                    filters_disc,
-                    noise_channels,
-                    latent_variables,
-                    padding,
-                    predict_year,
-                    ensemble_members,
-                    plot_upsample):
-
+def plot_fss_curves(
+    *,
+    mode,
+    arch,
+    log_folder,
+    weights_dir,
+    model_numbers,
+    problem_type,
+    filters_gen,
+    filters_disc,
+    noise_channels,
+    latent_variables,
+    padding,
+    predict_year,
+    ensemble_members,
+    plot_upsample,
+):
     df_dict = read_downscaling_factor()
     ds_fac = df_dict["downscaling_factor"]
     downscaling_steps = df_dict["steps"]
@@ -78,46 +79,52 @@ def plot_fss_curves(*,
     batch_size = 1
     num_batches = 256
 
-    if mode == 'det':
+    if mode == "det":
         ensemble_members = 1  # in this case, only used for printing
 
     precip_values = np.array([0.1, 0.5, 2.0, 5.0])
     spatial_scales = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
 
     # initialise model
-    model = setupmodel.setup_model(mode=mode,
-                                   arch=arch,
-                                   downscaling_steps=downscaling_steps,
-                                   input_channels=input_channels,
-                                   filters_gen=filters_gen,
-                                   filters_disc=filters_disc,
-                                   noise_channels=noise_channels,
-                                   latent_variables=latent_variables,
-                                   padding=padding)
+    model = setupmodel.setup_model(
+        mode=mode,
+        arch=arch,
+        downscaling_steps=downscaling_steps,
+        input_channels=input_channels,
+        filters_gen=filters_gen,
+        filters_disc=filters_disc,
+        noise_channels=noise_channels,
+        latent_variables=latent_variables,
+        padding=padding,
+    )
 
     # load appropriate dataset
     dates = get_dates(predict_year)
-    data_predict = DataGeneratorFull(dates=dates,
-                                     fcst_fields=all_fcst_fields,
-                                     batch_size=batch_size,
-                                     log_precip=True,
-                                     shuffle=True,
-                                     constants=True,
-                                     hour='random',
-                                     fcst_norm=True,
-                                     autocoarsen=autocoarsen)
+    data_predict = DataGeneratorFull(
+        dates=dates,
+        fcst_fields=all_fcst_fields,
+        batch_size=batch_size,
+        log_precip=True,
+        shuffle=True,
+        constants=True,
+        hour="random",
+        fcst_norm=True,
+        autocoarsen=autocoarsen,
+    )
 
     if plot_upsample:
         # requires a different data generator with different fields and no fcst_norm
-        data_benchmarks = DataGeneratorFull(dates=dates,
-                                            fcst_fields=all_fcst_fields,
-                                            batch_size=batch_size,
-                                            log_precip=False,
-                                            shuffle=True,
-                                            constants=True,
-                                            hour="random",
-                                            fcst_norm=False)
-        tpidx = 4*all_fcst_fields.index('tp')
+        data_benchmarks = DataGeneratorFull(
+            dates=dates,
+            fcst_fields=all_fcst_fields,
+            batch_size=batch_size,
+            log_precip=False,
+            shuffle=True,
+            constants=True,
+            hour="random",
+            fcst_norm=False,
+        )
+        tpidx = 4 * all_fcst_fields.index("tp")
 
     # tidier to iterate over GAN checkpoints and NN-interp using joint code
     model_numbers_ec = model_numbers.copy()
@@ -142,7 +149,9 @@ def plot_fss_curves(*,
         print(f"calculating for model number {model_number}")
         if model_number in model_numbers:
             # only load weights for GAN, not upscaling
-            gen_weights_file = os.path.join(weights_dir, f"gen_weights-{model_number:07d}.h5")
+            gen_weights_file = os.path.join(
+                weights_dir, f"gen_weights-{model_number:07d}.h5"
+            )
             if not os.path.isfile(gen_weights_file):
                 print(gen_weights_file, "not found, skipping")
                 continue
@@ -162,78 +171,118 @@ def plot_fss_curves(*,
             if model_number in model_numbers:
                 # GAN, not upscaling
                 inputs, outputs = next(data_pred_iter)
-                truth = outputs['output']
-                mask = outputs['mask']
+                truth = outputs["output"]
+                mask = outputs["mask"]
                 # create masked array for denormalisation step
                 norm_masked_truth = ma.array(truth, mask=mask)
                 # need to denormalise
-                denorm_masked_truth = data.denormalise(norm_masked_truth).astype(np.single)  # shape: batch_size x H x W
+                denorm_masked_truth = data.denormalise(norm_masked_truth).astype(
+                    np.single
+                )  # shape: batch_size x H x W
                 # fill in invalid data with 0s for FSS calculation; im_real is now a normal NumPy array
                 im_real = denorm_masked_truth.filled(0.0)
             else:
                 # upscaling, no need to denormalise
                 inputs, outputs = next(data_benchmarks_iter)
-                truth = outputs['output']
-                mask = outputs['mask']
+                truth = outputs["output"]
+                mask = outputs["mask"]
                 masked_truth = ma.array(truth, mask=mask).astype(np.single)
                 im_real = masked_truth.filled(0.0)
 
             if model_number in model_numbers:
                 # get GAN predictions
                 pred_ensemble = []
-                if mode == 'det':
-                    pred = data.denormalise(model.gen.predict([inputs['lo_res_inputs'],
-                                                               inputs['hi_res_inputs']]))[..., 0]
-                    pred[mask] = 0.0  # zero out entries where truth data was also zeroed out
+                if mode == "det":
+                    pred = data.denormalise(
+                        model.gen.predict(
+                            [inputs["lo_res_inputs"], inputs["hi_res_inputs"]]
+                        )
+                    )[..., 0]
+                    pred[
+                        mask
+                    ] = 0.0  # zero out entries where truth data was also zeroed out
                     pred_ensemble.append(pred)
                 else:
-                    if mode == 'GAN':
-                        noise_shape = inputs['lo_res_inputs'][0, ..., 0].shape + (noise_channels,)
-                    elif mode == 'VAEGAN':
-                        noise_shape = inputs['lo_res_inputs'][0, ..., 0].shape + (latent_variables,)
+                    if mode == "GAN":
+                        noise_shape = inputs["lo_res_inputs"][0, ..., 0].shape + (
+                            noise_channels,
+                        )
+                    elif mode == "VAEGAN":
+                        noise_shape = inputs["lo_res_inputs"][0, ..., 0].shape + (
+                            latent_variables,
+                        )
                     noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size)
-                    if mode == 'VAEGAN':
+                    if mode == "VAEGAN":
                         # call encoder once
-                        mean, logvar = model.gen.encoder([inputs['lo_res_inputs'], inputs['hi_res_inputs']])
+                        mean, logvar = model.gen.encoder(
+                            [inputs["lo_res_inputs"], inputs["hi_res_inputs"]]
+                        )
                     for jj in range(ensemble_members):
-                        inputs['noise_input'] = noise_gen()
-                        if mode == 'GAN':
-                            pred = data.denormalise(model.gen.predict([inputs['lo_res_inputs'],
-                                                                       inputs['hi_res_inputs'],
-                                                                       inputs['noise_input']]))[..., 0]
-                        elif mode == 'VAEGAN':
-                            dec_inputs = [mean, logvar, inputs['noise_input'], inputs['hi_res_inputs']]
-                            pred = data.denormalise(model.gen.decoder.predict(dec_inputs))[..., 0]
-                        pred[mask] = 0.0  # zero out entries where truth data was also zeroed out
+                        inputs["noise_input"] = noise_gen()
+                        if mode == "GAN":
+                            pred = data.denormalise(
+                                model.gen.predict(
+                                    [
+                                        inputs["lo_res_inputs"],
+                                        inputs["hi_res_inputs"],
+                                        inputs["noise_input"],
+                                    ]
+                                )
+                            )[..., 0]
+                        elif mode == "VAEGAN":
+                            dec_inputs = [
+                                mean,
+                                logvar,
+                                inputs["noise_input"],
+                                inputs["hi_res_inputs"],
+                            ]
+                            pred = data.denormalise(
+                                model.gen.decoder.predict(dec_inputs)
+                            )[..., 0]
+                        pred[
+                            mask
+                        ] = 0.0  # zero out entries where truth data was also zeroed out
                         pred_ensemble.append(pred)
 
                 # turn accumulated list into numpy array
-                pred_ensemble = np.stack(pred_ensemble, axis=1)  # shape: batch_size x ensemble_mem x H x W
+                pred_ensemble = np.stack(
+                    pred_ensemble, axis=1
+                )  # shape: batch_size x ensemble_mem x H x W
 
                 # list is large, so force garbage collect
                 gc.collect()
             else:
                 # pred_ensemble will be batch_size x ens x H x W
                 if model_number == "nn_interp":
-                    pred_ensemble = inputs['lo_res_inputs'][:, :, :, tpidx]  # batch_size x H x W
-                    pred_ensemble = nn_interp_model(pred_ensemble, ds_fac)  # batch_size x H x W
+                    pred_ensemble = inputs["lo_res_inputs"][
+                        :, :, :, tpidx
+                    ]  # batch_size x H x W
+                    pred_ensemble = nn_interp_model(
+                        pred_ensemble, ds_fac
+                    )  # batch_size x H x W
                     pred_ensemble[mask] = 0.0
-                    pred_ensemble = np.expand_dims(pred_ensemble, 1)  # batch_size x ens size [1] x H x W
+                    pred_ensemble = np.expand_dims(
+                        pred_ensemble, 1
+                    )  # batch_size x ens size [1] x H x W
 
                 else:
-                    raise RuntimeError('Unknown model_number {}' % model_number)
+                    raise RuntimeError("Unknown model_number {}" % model_number)
 
             for kk in range(batch_size):
                 for pv in precip_values:
                     for spasc in spatial_scales:
                         # method 1: "ensemble skill"
-                        fss_ens_accum(method1[model_number][pv][spasc]["fssobj"],
-                                      pred_ensemble[kk, :, :, :],
-                                      im_real[kk, :, :])
+                        fss_ens_accum(
+                            method1[model_number][pv][spasc]["fssobj"],
+                            pred_ensemble[kk, :, :, :],
+                            im_real[kk, :, :],
+                        )
                         # method 2: "ensemble member skill"
-                        fss_accumall(method2[model_number][pv][spasc]["fssobj"],
-                                     pred_ensemble[kk, :, :, :],
-                                     im_real[kk, :, :])
+                        fss_accumall(
+                            method2[model_number][pv][spasc]["fssobj"],
+                            pred_ensemble[kk, :, :, :],
+                            im_real[kk, :, :],
+                        )
                 gc.collect()
 
             # pred_ensemble is pretty large
@@ -244,8 +293,12 @@ def plot_fss_curves(*,
         # once image iteration is done, might as well compute score for this method!
         for pv in precip_values:
             for spasc in spatial_scales:
-                method1[model_number][pv][spasc]["score"] = fss_compute(method1[model_number][pv][spasc]["fssobj"])
-                method2[model_number][pv][spasc]["score"] = fss_compute(method2[model_number][pv][spasc]["fssobj"])
+                method1[model_number][pv][spasc]["score"] = fss_compute(
+                    method1[model_number][pv][spasc]["fssobj"]
+                )
+                method2[model_number][pv][spasc]["score"] = fss_compute(
+                    method2[model_number][pv][spasc]["fssobj"]
+                )
 
         if model_number in model_numbers:
             fname1 = "FSS-GAN-" + str(model_number) + "-1.pickle"
@@ -256,9 +309,9 @@ def plot_fss_curves(*,
         fnamefull1 = os.path.join(log_folder, fname1)
         fnamefull2 = os.path.join(log_folder, fname2)
 
-        with open(fnamefull1, 'wb') as f:
+        with open(fnamefull1, "wb") as f:
             pickle.dump(method1[model_number], f)
-        with open(fnamefull2, 'wb') as f:
+        with open(fnamefull2, "wb") as f:
             pickle.dump(method2[model_number], f)
 
 
@@ -313,13 +366,15 @@ def fss_accumall(fss, X_f, X_o):
 
     for ii in range(X_f.shape[0]):
         if fss["scale"] > 1:
-            S_f = uniform_filter(I_f[ii, :, :], size=fss["scale"], mode="constant", cval=0.0)
+            S_f = uniform_filter(
+                I_f[ii, :, :], size=fss["scale"], mode="constant", cval=0.0
+            )
         else:
             S_f = I_f[ii, :, :]
 
-        fss["sum_obs_sq"] += np.nansum(S_o ** 2)
+        fss["sum_obs_sq"] += np.nansum(S_o**2)
         fss["sum_fct_obs"] += np.nansum(S_f * S_o)
-        fss["sum_fct_sq"] += np.nansum(S_f ** 2)
+        fss["sum_fct_sq"] += np.nansum(S_f**2)
 
 
 def fss_ens_accum(fss, X_f, X_o):
@@ -353,9 +408,9 @@ def fss_ens_accum(fss, X_f, X_o):
         S_f = I_f
         S_o = I_o
 
-    fss["sum_obs_sq"] += np.nansum(S_o ** 2)
+    fss["sum_obs_sq"] += np.nansum(S_o**2)
     fss["sum_fct_obs"] += np.nansum(S_f * S_o)
-    fss["sum_fct_sq"] += np.nansum(S_f ** 2)
+    fss["sum_fct_sq"] += np.nansum(S_f**2)
 
 
 def fss_merge(fss_1, fss_2):

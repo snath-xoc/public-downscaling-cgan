@@ -9,6 +9,7 @@ import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.ma as ma
+
 # import matplotlib as mpl; mpl.use('svg')
 import seaborn as sns
 from matplotlib import colorbar, colors, gridspec
@@ -32,8 +33,8 @@ downscaling_steps = read_config.read_downscaling_factor()["steps"]
 value_range_precip = (0.1, 15.0)
 value_range_orog = (0.0, 1.0e4)
 cmap = ListedColormap(sns.color_palette("YlGnBu", 256))
-cmap.set_under('white')
-cmap.set_bad('black')
+cmap.set_under("white")
+cmap.set_bad("black")
 linewidth = 0.4
 extent = [19.1, 54.3, -13.7, 24.7]  # left, right, bottom, top
 alpha = 0.8
@@ -45,23 +46,33 @@ cb_tick_loc = np.array([0.1, 0.5, 1, 2, 5, 15])
 cb_tick_labels = [0.1, 0.5, 1, 2, 5, 15]
 
 # colormap for LSM -- removes the white end
-cmap_lsm = plt.get_cmap('terrain')
+cmap_lsm = plt.get_cmap("terrain")
 cmap_lsm = truncate_colourmap(cmap_lsm, 0, 0.8)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--log_folder', type=str,
-                    help="directory where model weights are saved")
-parser.add_argument('--model_number', type=int,
-                    help="model iteration to load", default=313600)
-parser.add_argument('--predict_year', type=int,
-                    help="year to predict on", default=2019)
-parser.add_argument('--num_samples', type=int,
-                    help="number of images to generate predictions for", default=1)
-parser.add_argument('--pred_ensemble_size', type=int,
-                    help="size of prediction ensemble", default=3)
+parser.add_argument(
+    "--log_folder", type=str, help="directory where model weights are saved"
+)
+parser.add_argument(
+    "--model_number", type=int, help="model iteration to load", default=313600
+)
+parser.add_argument("--predict_year", type=int, help="year to predict on", default=2019)
+parser.add_argument(
+    "--num_samples",
+    type=int,
+    help="number of images to generate predictions for",
+    default=1,
+)
+parser.add_argument(
+    "--pred_ensemble_size", type=int, help="size of prediction ensemble", default=3
+)
 parser.set_defaults(plot_all=False)
-parser.add_argument('--plot_all', dest='plot_all', action='store_true',
-                    help="Plot all GAN predictions separately, and plot power spectra")
+parser.add_argument(
+    "--plot_all",
+    dest="plot_all",
+    action="store_true",
+    help="Plot all GAN predictions separately, and plot power spectra",
+)
 args = parser.parse_args()
 
 log_folder = args.log_folder
@@ -70,8 +81,8 @@ predict_year = args.predict_year
 num_samples = args.num_samples
 pred_ensemble_size = args.pred_ensemble_size
 
-config_path = os.path.join(log_folder, 'setup_params.yaml')
-with open(config_path, 'r') as f:
+config_path = os.path.join(log_folder, "setup_params.yaml")
+with open(config_path, "r") as f:
     try:
         setup_params = yaml.safe_load(f)
     except yaml.YAMLError as exc:
@@ -92,38 +103,42 @@ data_paths = read_config.get_data_paths()
 
 batch_size = 1
 
-weights_fn = os.path.join(log_folder, 'models', f'gen_weights-{model_number:07}.h5')
+weights_fn = os.path.join(log_folder, "models", f"gen_weights-{model_number:07}.h5")
 dates = get_dates(predict_year, start_hour=0, end_hour=168)
 
 assert problem_type == "normal"  # removed autocoarsen from this script
 
 autocoarsen = False
-plot_input_title = 'Forecast'
-input_channels = 4*len(all_fcst_fields)
+plot_input_title = "Forecast"
+input_channels = 4 * len(all_fcst_fields)
 
 # load appropriate dataset
-data_predict = DataGeneratorFull(dates=dates,
-                                 fcst_fields=all_fcst_fields,
-                                 start_hour=0,
-                                 end_hour=168,
-                                 batch_size=batch_size,
-                                 log_precip=True,
-                                 shuffle=True,
-                                 constants=True,
-                                 fcst_norm=True)
+data_predict = DataGeneratorFull(
+    dates=dates,
+    fcst_fields=all_fcst_fields,
+    start_hour=0,
+    end_hour=168,
+    batch_size=batch_size,
+    log_precip=True,
+    shuffle=True,
+    constants=True,
+    fcst_norm=True,
+)
 
 
 # initialise model
-model = setup_model(mode=mode,
-                    arch=arch,
-                    downscaling_steps=downscaling_steps,
-                    input_channels=input_channels,
-                    constant_fields=constant_fields,
-                    filters_gen=filters_gen,
-                    filters_disc=filters_disc,
-                    noise_channels=noise_channels,
-                    latent_variables=latent_variables,
-                    padding=padding)
+model = setup_model(
+    mode=mode,
+    arch=arch,
+    downscaling_steps=downscaling_steps,
+    input_channels=input_channels,
+    constant_fields=constant_fields,
+    filters_gen=filters_gen,
+    filters_disc=filters_disc,
+    noise_channels=noise_channels,
+    latent_variables=latent_variables,
+    padding=padding,
+)
 gen = model.gen
 if mode == "VAEGAN":
     _init_VAEGAN(gen, data_predict, batch_size, latent_variables)
@@ -139,8 +154,8 @@ gen.load_weights(weights_fn)
 #                                     shuffle=True,
 #                                     fcst_norm=False)
 
-tpidx_mean = 4*all_fcst_fields.index('tp')  # 4*idx is tp ens mean,
-tpidx_stdev = 4*all_fcst_fields.index('tp') + 1  # 4*idx+1 is tp ens stdev
+tpidx_mean = 4 * all_fcst_fields.index("tp")  # 4*idx is tp ens mean,
+tpidx_stdev = 4 * all_fcst_fields.index("tp") + 1  # 4*idx+1 is tp ens stdev
 
 pred = []
 seq_real = []
@@ -157,17 +172,21 @@ for ii in range(num_samples):
     hours_save.append(data_predict.time_idxs[ii])
 
     # store denormalised inputs, outputs, predictions
-    seq_const.append(inputs['hi_res_inputs'])
-    input_conditions = inputs['lo_res_inputs'].copy()
+    seq_const.append(inputs["hi_res_inputs"])
+    input_conditions = inputs["lo_res_inputs"].copy()
 
     # denormalise precip inputs for plotting
-    input_conditions[..., tpidx_mean] = data.denormalise(inputs['lo_res_inputs'][..., tpidx_mean])
-    input_conditions[..., tpidx_stdev] = data.denormalise(inputs['lo_res_inputs'][..., tpidx_stdev])
+    input_conditions[..., tpidx_mean] = data.denormalise(
+        inputs["lo_res_inputs"][..., tpidx_mean]
+    )
+    input_conditions[..., tpidx_stdev] = data.denormalise(
+        inputs["lo_res_inputs"][..., tpidx_stdev]
+    )
 
     seq_cond.append(input_conditions)
 
-    truth = outputs['output']
-    mask = outputs['mask']
+    truth = outputs["output"]
+    mask = outputs["mask"]
     masked_truth = ma.array(truth, mask=mask)
 
     # make sure ground truth image has correct dimensions
@@ -178,27 +197,40 @@ for ii in range(num_samples):
     print(f"max truth value is {np.max(seq_real[-1])}")
 
     pred_ensemble = []
-    if mode == 'det':  # this is plotting det as a model
+    if mode == "det":  # this is plotting det as a model
         pred_ensemble_size = 1  # can't generate an ensemble with deterministic method
-        pred_ensemble.append(data.denormalise(gen.predict(inputs)))  # pretend it's an ensemble so dims match
+        pred_ensemble.append(
+            data.denormalise(gen.predict(inputs))
+        )  # pretend it's an ensemble so dims match
         pred.append(np.array(pred_ensemble))
     else:
-        if mode == 'GAN':
-            noise_shape = inputs['lo_res_inputs'][0, ..., 0].shape + (noise_channels,)
+        if mode == "GAN":
+            noise_shape = inputs["lo_res_inputs"][0, ..., 0].shape + (noise_channels,)
             noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size)
-        elif mode == 'VAEGAN':
-            noise_shape = inputs['lo_res_inputs'][0, ..., 0].shape + (latent_variables,)
+        elif mode == "VAEGAN":
+            noise_shape = inputs["lo_res_inputs"][0, ..., 0].shape + (latent_variables,)
             noise_gen = NoiseGenerator(noise_shape, batch_size=batch_size)
-        if mode == 'VAEGAN':
+        if mode == "VAEGAN":
             # call encoder once
-            mean, logvar = gen.encoder([inputs['lo_res_inputs'], inputs['hi_res_inputs']])
+            mean, logvar = gen.encoder(
+                [inputs["lo_res_inputs"], inputs["hi_res_inputs"]]
+            )
         for jj in range(pred_ensemble_size):
-            inputs['noise_input'] = noise_gen()
-            if mode == 'GAN':
-                gan_inputs = [inputs['lo_res_inputs'], inputs['hi_res_inputs'], inputs['noise_input']]
+            inputs["noise_input"] = noise_gen()
+            if mode == "GAN":
+                gan_inputs = [
+                    inputs["lo_res_inputs"],
+                    inputs["hi_res_inputs"],
+                    inputs["noise_input"],
+                ]
                 pred_ensemble.append(data.denormalise(gen.predict(gan_inputs)))
-            elif mode == 'VAEGAN':
-                dec_inputs = [mean, logvar, inputs['noise_input'], inputs['hi_res_inputs']]
+            elif mode == "VAEGAN":
+                dec_inputs = [
+                    mean,
+                    logvar,
+                    inputs["noise_input"],
+                    inputs["hi_res_inputs"],
+                ]
                 pred_ensemble.append(data.denormalise(gen.decoder.predict(dec_inputs)))
             print(f"max predicted value is {np.max(pred_ensemble[-1])}")
         pred.append(np.array(pred_ensemble))
@@ -237,8 +269,12 @@ for ii in range(num_samples):
     plt.figure(figsize=(8, 7), dpi=200)
     # calculate forecast date and valid time, for plot title
     fcst_date = datetime.datetime.strptime(dates_save[ii], "%Y%m%d")
-    valid_dt = fcst_date + datetime.timedelta(hours=int(hours_save[ii])*data.HOURS)  # needs to change for 12Z forecasts
-    title = f"Forecast {dates_save[ii]}, valid starting {valid_dt.strftime('%Y%m%d %H')}Z"
+    valid_dt = fcst_date + datetime.timedelta(
+        hours=int(hours_save[ii]) * data.HOURS
+    )  # needs to change for 12Z forecasts
+    title = (
+        f"Forecast {dates_save[ii]}, valid starting {valid_dt.strftime('%Y%m%d %H')}Z"
+    )
     plt.suptitle(title, fontsize=16)
 
     # set up sub-plots
@@ -251,69 +287,127 @@ for ii in range(num_samples):
     ax6 = plt.subplot(gs[1, 2], projection=ccrs.PlateCarree())
     ax = [ax1, ax2, ax3, ax4, ax5, ax6]
 
-    fcst_tmean_ax = ax[0].imshow(fcst_total_mean,
-                                 norm=colors.LogNorm(*value_range_precip),
-                                 cmap=cmap, origin='lower', extent=extent,
-                                 transform=ccrs.PlateCarree(), alpha=alpha)
+    fcst_tmean_ax = ax[0].imshow(
+        fcst_total_mean,
+        norm=colors.LogNorm(*value_range_precip),
+        cmap=cmap,
+        origin="lower",
+        extent=extent,
+        transform=ccrs.PlateCarree(),
+        alpha=alpha,
+    )
     ax[0].set_title("Forecast - tp mean")
-    ax[0].coastlines(resolution='10m', color='black', linewidth=linewidth)
-    cbs.append(plt.colorbar(fcst_tmean_ax, ax=ax[0],
-                            norm=colors.LogNorm(*value_range_precip),
-                            orientation='horizontal',
-                            fraction=0.035, pad=0.04))
+    ax[0].coastlines(resolution="10m", color="black", linewidth=linewidth)
+    cbs.append(
+        plt.colorbar(
+            fcst_tmean_ax,
+            ax=ax[0],
+            norm=colors.LogNorm(*value_range_precip),
+            orientation="horizontal",
+            fraction=0.035,
+            pad=0.04,
+        )
+    )
 
-    fcst_tstd_ax = ax[1].imshow(fcst_total_stdev,
-                                norm=colors.LogNorm(*value_range_precip),
-                                cmap=cmap, origin='lower', extent=extent,
-                                transform=ccrs.PlateCarree(), alpha=alpha)
-    ax[1].set_title('Forecast - tp stdev')
-    ax[1].coastlines(resolution='10m', color='black', linewidth=linewidth)
-    cbs.append(plt.colorbar(fcst_tstd_ax, ax=ax[1],
-                            norm=colors.LogNorm(*value_range_precip),
-                            orientation='horizontal',
-                            fraction=0.035, pad=0.04))
+    fcst_tstd_ax = ax[1].imshow(
+        fcst_total_stdev,
+        norm=colors.LogNorm(*value_range_precip),
+        cmap=cmap,
+        origin="lower",
+        extent=extent,
+        transform=ccrs.PlateCarree(),
+        alpha=alpha,
+    )
+    ax[1].set_title("Forecast - tp stdev")
+    ax[1].coastlines(resolution="10m", color="black", linewidth=linewidth)
+    cbs.append(
+        plt.colorbar(
+            fcst_tstd_ax,
+            ax=ax[1],
+            norm=colors.LogNorm(*value_range_precip),
+            orientation="horizontal",
+            fraction=0.035,
+            pad=0.04,
+        )
+    )
 
-    OROG = ax[2].imshow(constant_0,
-                        cmap="terrain", origin='lower', alpha=alpha)
-    ax[2].set_title('Orography')
-    foo = plt.colorbar(OROG, ax=ax[2],
-                       norm=colors.Normalize(*value_range_orog),
-                       orientation='horizontal',
-                       fraction=0.04, pad=0.04)
+    OROG = ax[2].imshow(constant_0, cmap="terrain", origin="lower", alpha=alpha)
+    ax[2].set_title("Orography")
+    foo = plt.colorbar(
+        OROG,
+        ax=ax[2],
+        norm=colors.Normalize(*value_range_orog),
+        orientation="horizontal",
+        fraction=0.04,
+        pad=0.04,
+    )
     foo.set_label("Elevation [m]", size=8)
 
-    TRUTH = ax[3].imshow(truth,
-                         norm=colors.LogNorm(*value_range_precip),
-                         cmap=cmap, origin='lower', extent=extent,
-                         transform=ccrs.PlateCarree(), alpha=alpha)
-    ax[3].set_title('Ground truth')
-    ax[3].coastlines(resolution='10m', color='black', linewidth=linewidth)
-    cbs.append(plt.colorbar(TRUTH, ax=ax[3],
-                            norm=colors.LogNorm(*value_range_precip),
-                            orientation='horizontal',
-                            fraction=0.035, pad=0.04))
+    TRUTH = ax[3].imshow(
+        truth,
+        norm=colors.LogNorm(*value_range_precip),
+        cmap=cmap,
+        origin="lower",
+        extent=extent,
+        transform=ccrs.PlateCarree(),
+        alpha=alpha,
+    )
+    ax[3].set_title("Ground truth")
+    ax[3].coastlines(resolution="10m", color="black", linewidth=linewidth)
+    cbs.append(
+        plt.colorbar(
+            TRUTH,
+            ax=ax[3],
+            norm=colors.LogNorm(*value_range_precip),
+            orientation="horizontal",
+            fraction=0.035,
+            pad=0.04,
+        )
+    )
 
-    PRED = ax[4].imshow(pred_0,
-                        norm=colors.LogNorm(*value_range_precip),
-                        cmap=cmap, origin='lower', extent=extent,
-                        transform=ccrs.PlateCarree(), alpha=alpha)
-    ax[4].set_title('GAN - example prediction')
-    ax[4].coastlines(resolution='10m', color='black', linewidth=linewidth)
-    cbs.append(plt.colorbar(PRED, ax=ax[4],
-                            norm=colors.LogNorm(*value_range_precip),
-                            orientation='horizontal',
-                            fraction=0.035, pad=0.04))
+    PRED = ax[4].imshow(
+        pred_0,
+        norm=colors.LogNorm(*value_range_precip),
+        cmap=cmap,
+        origin="lower",
+        extent=extent,
+        transform=ccrs.PlateCarree(),
+        alpha=alpha,
+    )
+    ax[4].set_title("GAN - example prediction")
+    ax[4].coastlines(resolution="10m", color="black", linewidth=linewidth)
+    cbs.append(
+        plt.colorbar(
+            PRED,
+            ax=ax[4],
+            norm=colors.LogNorm(*value_range_precip),
+            orientation="horizontal",
+            fraction=0.035,
+            pad=0.04,
+        )
+    )
 
-    PRED_mean = ax[5].imshow(pred_mean,
-                             norm=colors.LogNorm(*value_range_precip),
-                             cmap=cmap, origin='lower', extent=extent,
-                             transform=ccrs.PlateCarree(), alpha=0.8)
-    ax[5].set_title('GAN - mean prediction')
-    ax[5].coastlines(resolution='10m', color='black', linewidth=linewidth)
-    cbs.append(plt.colorbar(PRED_mean, ax=ax[5],
-                            norm=colors.LogNorm(*value_range_precip),
-                            orientation='horizontal',
-                            fraction=0.035, pad=0.04))
+    PRED_mean = ax[5].imshow(
+        pred_mean,
+        norm=colors.LogNorm(*value_range_precip),
+        cmap=cmap,
+        origin="lower",
+        extent=extent,
+        transform=ccrs.PlateCarree(),
+        alpha=0.8,
+    )
+    ax[5].set_title("GAN - mean prediction")
+    ax[5].coastlines(resolution="10m", color="black", linewidth=linewidth)
+    cbs.append(
+        plt.colorbar(
+            PRED_mean,
+            ax=ax[5],
+            norm=colors.LogNorm(*value_range_precip),
+            orientation="horizontal",
+            fraction=0.035,
+            pad=0.04,
+        )
+    )
 
     for ax_ in ax:
         ax_.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -325,9 +419,13 @@ for ii in range(num_samples):
         cb.set_label(units, size=8)
 
     # cannot save as pdf - will produce artefacts
-    plt.savefig(os.path.join(log_folder,
-                             f"prediction-and-inputs-{model_number}-{data_predict.seed}-{ii}.png"),
-                bbox_inches='tight')
+    plt.savefig(
+        os.path.join(
+            log_folder,
+            f"prediction-and-inputs-{model_number}-{data_predict.seed}-{ii}.png",
+        ),
+        bbox_inches="tight",
+    )
     plt.close()
 
 if args.plot_all:
@@ -340,10 +438,10 @@ if args.plot_all:
     sequences = []
     for ii in range(num_samples):
         tmp = {}
-        tmp['TRUTH'] = np.maximum(seq_real[ii][0, ..., 0], 1e-6)
+        tmp["TRUTH"] = np.maximum(seq_real[ii][0, ..., 0], 1e-6)
         tmp["Forecast"] = np.maximum(seq_cond[ii][0, ..., tpidx_mean], 1e-6)
-        tmp['dates'] = dates_save[ii]
-        tmp['time_idxs'] = hours_save[ii]
+        tmp["dates"] = dates_save[ii]
+        tmp["time_idxs"] = hours_save[ii]
         for jj in range(pred_ensemble_size):
             tmp[f"{mode} pred {jj+1}"] = np.maximum(pred[ii][jj][0, ..., 0], 1e-6)
         sequences.append(tmp)
@@ -351,78 +449,105 @@ if args.plot_all:
     fname = "sequences-" + str(model_number) + "-" + str(num_samples) + ".pickle"
     fnamefull = os.path.join(log_folder, fname)
 
-    with open(fnamefull, 'wb') as f:
+    with open(fnamefull, "wb") as f:
         pickle.dump(sequences, f)
 
     num_cols = num_samples
     num_rows = len(labels)
     spacing = 10
-    plt.figure(figsize=(1.5*num_cols, 1.5*num_rows), dpi=300)
+    plt.figure(figsize=(1.5 * num_cols, 1.5 * num_rows), dpi=300)
 
-    gs = gridspec.GridSpec(spacing*num_rows+1, spacing*num_cols,
-                           wspace=0.5, hspace=0.5)
+    gs = gridspec.GridSpec(
+        spacing * num_rows + 1, spacing * num_cols, wspace=0.5, hspace=0.5
+    )
 
     for kk in range(num_samples):
         for ii in range(len(labels)):
-            plt.subplot(gs[(spacing*ii):(spacing+spacing*ii),
-                           (spacing*kk):(spacing+spacing*kk)],
-                        projection=ccrs.PlateCarree())
+            plt.subplot(
+                gs[
+                    (spacing * ii) : (spacing + spacing * ii),
+                    (spacing * kk) : (spacing + spacing * kk),
+                ],
+                projection=ccrs.PlateCarree(),
+            )
             ax = plt.gca()
-            ax.coastlines(resolution='10m', color='black', linewidth=linewidth)
-            plot_img_log_coastlines(sequences[kk][labels[ii]],
-                                    value_range_precip=value_range_precip,
-                                    cmap=cmap,
-                                    extent=extent,
-                                    alpha=alpha)
+            ax.coastlines(resolution="10m", color="black", linewidth=linewidth)
+            plot_img_log_coastlines(
+                sequences[kk][labels[ii]],
+                value_range_precip=value_range_precip,
+                cmap=cmap,
+                extent=extent,
+                alpha=alpha,
+            )
             if ii == 0:
-                title = dates_save[kk][:4] + '-' + dates_save[kk][4:6] + '-' + dates_save[kk][6:8] + ' ' + str(hours_save[kk]) + ' time period'
+                title = (
+                    dates_save[kk][:4]
+                    + "-"
+                    + dates_save[kk][4:6]
+                    + "-"
+                    + dates_save[kk][6:8]
+                    + " "
+                    + str(hours_save[kk])
+                    + " time period"
+                )
                 plt.title(title, fontsize=9)
 
             if kk == 0:
                 ax.set_ylabel(labels[ii])  # cartopy takes over the xlabel and ylabel
                 ax.set_yticks([])  # this weird hack restores them. WHY?!?!
 
-    plt.suptitle('Example predictions for different input conditions')
+    plt.suptitle("Example predictions for different input conditions")
 
     cax = plt.subplot(gs[-1, 1:-1]).axes
-    cb = colorbar.ColorbarBase(cax, norm=colors.LogNorm(*value_range_precip), cmap=cmap, orientation='horizontal')
+    cb = colorbar.ColorbarBase(
+        cax,
+        norm=colors.LogNorm(*value_range_precip),
+        cmap=cmap,
+        orientation="horizontal",
+    )
     cb.set_ticks(cb_tick_loc)
     cb.set_ticklabels(cb_tick_labels)
     cax.tick_params(labelsize=12)
     cb.set_label(units, size=12)
 
     # cannot save as pdf - will produce artefacts
-    plt.savefig(os.path.join(log_folder,
-                             f"predictions-{model_number}-{data_predict.seed}.png"),
-                bbox_inches='tight')
+    plt.savefig(
+        os.path.join(log_folder, f"predictions-{model_number}-{data_predict.seed}.png"),
+        bbox_inches="tight",
+    )
     plt.close()
     gc.collect()
 
 # power spectrum plots
 if args.plot_all:
     # colours = ['plum', 'palevioletred', 'lightslategrey', 'coral', 'lightblue', 'darkseagreen', 'mediumturquoise', 'purple', 'navy']
-    plt.style.use('seaborn-colorblind')
-    colours = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    plt.style.use("seaborn-colorblind")
+    colours = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     plot_scales = [512, 256, 128, 64, 32, 16, 8, 4]
     # create a PdfPages object to save multiple plots to same pdf
-    pdf = PdfPages(os.path.join(log_folder,
-                                f"RAPSD-{model_number}-{data_predict.seed}.pdf"))
+    pdf = PdfPages(
+        os.path.join(log_folder, f"RAPSD-{model_number}-{data_predict.seed}.pdf")
+    )
 
     for kk in range(num_samples):
         fig, ax = plt.subplots()
         # this iterates over the minimum of len(labels) [pred_ensemble_size + 2]
         # and colours [6], i.e., it will show at most 4 GAN predictions
         for ii, color in zip(range(len(labels)), colours):
-            R_1, freq_1 = rapsd(sequences[kk][labels[ii]], fft_method=np.fft, return_freq=True)
+            R_1, freq_1 = rapsd(
+                sequences[kk][labels[ii]], fft_method=np.fft, return_freq=True
+            )
             # Plot the observed power spectrum and the model
-            plot_spectrum1d(freq_1,
-                            R_1,
-                            x_units="km",
-                            y_units="dBR",
-                            color=color,
-                            ax=ax,
-                            label=labels[ii],
-                            wavelength_ticks=plot_scales)
+            plot_spectrum1d(
+                freq_1,
+                R_1,
+                x_units="km",
+                y_units="dBR",
+                color=color,
+                ax=ax,
+                label=labels[ii],
+                wavelength_ticks=plot_scales,
+            )
 
             plt.legend()
 

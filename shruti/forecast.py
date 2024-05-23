@@ -15,7 +15,16 @@ import netCDF4 as nc
 import numpy as np
 from tensorflow.keras.utils import Progbar
 
-from data import HOURS, all_fcst_fields, accumulated_fields, nonnegative_fields, fcst_norm, logprec, denormalise, load_hires_constants
+from data import (
+    HOURS,
+    all_fcst_fields,
+    accumulated_fields,
+    nonnegative_fields,
+    fcst_norm,
+    logprec,
+    denormalise,
+    load_hires_constants,
+)
 import read_config
 from noise import NoiseGenerator
 from setupmodel import setup_model
@@ -31,7 +40,9 @@ downscaling_steps = read_config.read_downscaling_factor()["steps"]
 assert fcst_norm is not None
 
 # Open and parse forecast.yaml
-fcstyaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "forecast.yaml")
+fcstyaml_path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "forecast.yaml"
+)
 with open(fcstyaml_path, "r") as f:
     try:
         fcst_params = yaml.safe_load(f)
@@ -64,25 +75,31 @@ padding = setup_params["MODEL"]["padding"]
 filters_gen = setup_params["GENERATOR"]["filters_gen"]
 noise_channels = setup_params["GENERATOR"]["noise_channels"]
 latent_variables = setup_params["GENERATOR"]["latent_variables"]
-filters_disc = setup_params["DISCRIMINATOR"]["filters_disc"]  # TODO: avoid setting up discriminator in forecast mode?
+filters_disc = setup_params["DISCRIMINATOR"][
+    "filters_disc"
+]  # TODO: avoid setting up discriminator in forecast mode?
 constant_fields = 2
 
-assert mode == "GAN", "standalone forecast script only for GAN, not VAE-GAN or deterministic model"
+assert (
+    mode == "GAN"
+), "standalone forecast script only for GAN, not VAE-GAN or deterministic model"
 
 # Set up pre-trained GAN
 weights_fn = os.path.join(model_folder, "models", f"gen_weights-{checkpoint:07}.h5")
-input_channels = 4*len(all_fcst_fields)
+input_channels = 4 * len(all_fcst_fields)
 
-model = setup_model(mode=mode,
-                    arch=arch,
-                    downscaling_steps=downscaling_steps,
-                    input_channels=input_channels,
-                    constant_fields=constant_fields,
-                    filters_gen=filters_gen,
-                    filters_disc=filters_disc,
-                    noise_channels=noise_channels,
-                    latent_variables=latent_variables,
-                    padding=padding)
+model = setup_model(
+    mode=mode,
+    arch=arch,
+    downscaling_steps=downscaling_steps,
+    input_channels=input_channels,
+    constant_fields=constant_fields,
+    filters_gen=filters_gen,
+    filters_disc=filters_disc,
+    noise_channels=noise_channels,
+    latent_variables=latent_variables,
+    padding=padding,
+)
 gen = model.gen
 gen.load_weights(weights_fn)
 
@@ -111,40 +128,33 @@ def create_output_file(nc_out_path):
     rootgrp.createDimension("valid_time", None)
 
     # Create variables
-    latitude_data = rootgrp.createVariable("latitude",
-                                           "f4",
-                                           ("latitude",))
+    latitude_data = rootgrp.createVariable("latitude", "f4", ("latitude",))
     latitude_data.units = "degrees_north"
-    latitude_data[:] = latitude     # Write the latitude data
+    latitude_data[:] = latitude  # Write the latitude data
 
-    longitude_data = rootgrp.createVariable("longitude",
-                                            "f4",
-                                            ("longitude",))
+    longitude_data = rootgrp.createVariable("longitude", "f4", ("longitude",))
     longitude_data.units = "degrees_east"
-    longitude_data[:] = longitude   # Write the longitude data
+    longitude_data[:] = longitude  # Write the longitude data
 
-    ensemble_data = rootgrp.createVariable("member",
-                                           "i4",
-                                           ("member",))
+    ensemble_data = rootgrp.createVariable("member", "i4", ("member",))
     ensemble_data.units = "ensemble member"
-    ensemble_data[:] = range(1, ensemble_members+1)
+    ensemble_data[:] = range(1, ensemble_members + 1)
 
-    netcdf_dict["time_data"] = rootgrp.createVariable("time",
-                                                      "f4",
-                                                      ("time",))
+    netcdf_dict["time_data"] = rootgrp.createVariable("time", "f4", ("time",))
     netcdf_dict["time_data"].units = "hours since 1900-01-01 00:00:00.0"
 
-    netcdf_dict["valid_time_data"] = rootgrp.createVariable("fcst_valid_time",
-                                                            "f4",
-                                                            ("time", "valid_time"))
+    netcdf_dict["valid_time_data"] = rootgrp.createVariable(
+        "fcst_valid_time", "f4", ("time", "valid_time")
+    )
     netcdf_dict["valid_time_data"].units = "hours since 1900-01-01 00:00:00.0"
 
-    netcdf_dict["precipitation"] = rootgrp.createVariable("precipitation",
-                                                          "f4",
-                                                          ("time", "member", "valid_time",
-                                                           "latitude", "longitude"),
-                                                          compression="zlib",
-                                                          chunksizes=(1, 1, 1, len(latitude), len(longitude)))
+    netcdf_dict["precipitation"] = rootgrp.createVariable(
+        "precipitation",
+        "f4",
+        ("time", "member", "valid_time", "latitude", "longitude"),
+        compression="zlib",
+        chunksizes=(1, 1, 1, len(latitude), len(longitude)),
+    )
     netcdf_dict["precipitation"].units = "mm h**-1"
     netcdf_dict["precipitation"].long_name = "Precipitation"
 
@@ -156,9 +166,13 @@ netcdf_dict["time_data"][0] = nc_in["time"][0]
 
 # loop over time chunks. output forecasts may not start from hour 0, so
 # generate output and input valid time indices using enumerate(...)
-for out_time_idx, in_time_idx in enumerate(range(start_hour//HOURS, end_hour//HOURS)):
+for out_time_idx, in_time_idx in enumerate(
+    range(start_hour // HOURS, end_hour // HOURS)
+):
     # copy across valid_time from input file
-    netcdf_dict["valid_time_data"][0, out_time_idx] = nc_in["fcst_valid_time"][0][in_time_idx]
+    netcdf_dict["valid_time_data"][0, out_time_idx] = nc_in["fcst_valid_time"][0][
+        in_time_idx
+    ]
     field_arrays = []
 
     # the contents of the next loop are v. similar to load_fcst from data.py,
@@ -169,7 +183,9 @@ for out_time_idx, in_time_idx in enumerate(range(start_hour//HOURS, end_hour//HO
         # corresponding to n_forecasts x n_ensemble_members x n_valid_times x n_lats x n_lons
 
         # grab start and end of 6-hour block in one operation
-        temp_data = nc_in[field][0, :, in_time_idx:in_time_idx+2, :, :]  # ens x 2 x lat x lon
+        temp_data = nc_in[field][
+            0, :, in_time_idx : in_time_idx + 2, :, :
+        ]  # ens x 2 x lat x lon
         temp_start = temp_data[:, 0, :, :]  # ens x lat x lon, start of timestep
         temp_end = temp_data[:, 1, :, :]  # ens x lat x lon, end of timestep
 
@@ -179,25 +195,23 @@ for out_time_idx, in_time_idx in enumerate(range(start_hour//HOURS, end_hour//HO
             temp_mean = np.mean(temp_diff, axis=0)  # lat x lon
             temp_std = np.std(temp_diff, axis=0, ddof=1)
             zeros = np.zeros(temp_mean.shape)
-            data = np.stack([temp_mean,
-                             temp_std,
-                             zeros,
-                             zeros],
-                            axis=-1)  # lat x lon x 4
+            data = np.stack(
+                [temp_mean, temp_std, zeros, zeros], axis=-1
+            )  # lat x lon x 4
         else:
             temp_start_mean = np.mean(temp_start, axis=0)  # lat x lon
             temp_start_std = np.std(temp_start, axis=0, ddof=1)
             temp_end_mean = np.mean(temp_end, axis=0)
             temp_end_std = np.std(temp_end, axis=0, ddof=1)
-            data = np.stack([temp_start_mean,
-                             temp_start_std,
-                             temp_end_mean,
-                             temp_end_std],
-                            axis=-1)  # lat x lon x 4
+            data = np.stack(
+                [temp_start_mean, temp_start_std, temp_end_mean, temp_end_std], axis=-1
+            )  # lat x lon x 4
 
         # perform normalisation on forecast data
         if field in nonnegative_fields:
-            data = np.maximum(data, 0.0)  # eliminate any data weirdness/regridding issues
+            data = np.maximum(
+                data, 0.0
+            )  # eliminate any data weirdness/regridding issues
 
         if field in ["tp", "cp"]:
             # precip is measured in metres, so multiply to get mm
@@ -205,7 +219,7 @@ for out_time_idx, in_time_idx in enumerate(range(start_hour//HOURS, end_hour//HO
             data /= HOURS  # convert to mm/hr
         elif field in accumulated_fields:
             # for all other accumulated fields [just ssr for us]
-            data /= (HOURS*3600)  # convert from a 6-hr difference to a per-second rate
+            data /= HOURS * 3600  # convert from a 6-hr difference to a per-second rate
 
         if field in ["tp", "cp"]:
             data = logprec(data, True)
@@ -228,8 +242,12 @@ for out_time_idx, in_time_idx in enumerate(range(start_hour//HOURS, end_hour//HO
 
         field_arrays.append(data)
 
-    network_fcst_input = np.concatenate(field_arrays, axis=-1)  # lat x lon x 4*len(all_fcst_fields)
-    network_fcst_input = np.expand_dims(network_fcst_input, axis=0)  # 1 x lat x lon x 4*len(...)
+    network_fcst_input = np.concatenate(
+        field_arrays, axis=-1
+    )  # lat x lon x 4*len(all_fcst_fields)
+    network_fcst_input = np.expand_dims(
+        network_fcst_input, axis=0
+    )  # 1 x lat x lon x 4*len(...)
 
     noise_shape = network_fcst_input.shape[1:-1] + (noise_channels,)
     noise_gen = NoiseGenerator(noise_shape, batch_size=1)
@@ -237,7 +255,9 @@ for out_time_idx, in_time_idx in enumerate(range(start_hour//HOURS, end_hour//HO
     for ii in range(ensemble_members):
         gan_inputs = [network_fcst_input, network_const_input, noise_gen()]
         gan_prediction = gen.predict(gan_inputs, verbose=False)  # 1 x lat x lon x 1
-        netcdf_dict["precipitation"][0, ii, out_time_idx, :, :] = denormalise(gan_prediction[0, :, :, 0])
+        netcdf_dict["precipitation"][0, ii, out_time_idx, :, :] = denormalise(
+            gan_prediction[0, :, :, 0]
+        )
         progbar.add(1)
 
 nc_in.close()

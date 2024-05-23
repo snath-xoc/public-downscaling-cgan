@@ -8,17 +8,27 @@ import read_config
 
 
 class DataGenerator(Sequence):
-    '''
+    """
     Data generator class that returns (forecast, constants, mask, truth) data. Class will return forecast data at the start and end of each interval (for non-accumulated fields) and accumulated fields over the interval.  The truth data is averaged over the interval.
 
     DataGenerator(["20180409", "20200607"], fcst_fields=["cape", "tp"], start_hour=12, end_hour=24) will return data over two periods: 12-18 and 18-24 hours for the forecasts initialised on 20180409 and 20200607.
-    '''
-    def __init__(self, dates, fcst_fields,
-                 start_hour=0, end_hour=168,
-                 batch_size=1, log_precip=True,
-                 shuffle=True, constants=True, fcst_norm=True,
-                 autocoarsen=False, seed=9999):
-        '''
+    """
+
+    def __init__(
+        self,
+        dates,
+        fcst_fields,
+        start_hour=0,
+        end_hour=168,
+        batch_size=1,
+        log_precip=True,
+        shuffle=True,
+        constants=True,
+        fcst_norm=True,
+        autocoarsen=False,
+        seed=9999,
+    ):
+        """
         Forecast: input forecast data
         Constants: geographic fields; LSM and orography
         Mask: False where truth data is valid, True where truth data is invalid
@@ -35,7 +45,7 @@ class DataGenerator(Sequence):
             fcst_norm (bool): Whether to apply normalisation to fields to make O(1)
             autocoarsen (bool): Whether to replace forecast data by coarsened truth
             seed (int): Random seed given to NumPy, used for repeatable shuffles
-        '''
+        """
 
         # sanity checks for our dataset
         assert start_hour >= 0
@@ -67,12 +77,12 @@ class DataGenerator(Sequence):
         temp_dates = np.array(dates)
 
         # represent valid lead-time intervals, 0 = 0-6 hours, 1 = 6-12 hours, 2 = 12-18 hours etc
-        #temp_time_idxs = np.arange(start_hour//HOURS, end_hour//HOURS)
+        # temp_time_idxs = np.arange(start_hour//HOURS, end_hour//HOURS)
 
         # if no shuffle, the DataGenerator will return each interval from the
         # first date, then each interval from the second date, etc.
-        self.dates = temp_dates#np.repeat(temp_dates, len(temp_time_idxs))
-        #self.time_idxs = np.tile(temp_time_idxs, len(temp_dates))
+        self.dates = temp_dates  # np.repeat(temp_dates, len(temp_time_idxs))
+        # self.time_idxs = np.tile(temp_time_idxs, len(temp_dates))
 
         if self.shuffle:
             rng = np.random.default_rng(seed)
@@ -83,15 +93,28 @@ class DataGenerator(Sequence):
         return len(self.dates) // self.batch_size
 
     def _dataset_autocoarsener(self, truth):
-        kernel_tf = tf.constant(1.0/(self.ds_factor*self.ds_factor), shape=(self.ds_factor, self.ds_factor, 1, 1), dtype=tf.float32)
-        image = tf.nn.conv2d(truth, filters=kernel_tf, strides=[1, self.ds_factor, self.ds_factor, 1], padding='VALID',
-                             name='conv_debug', data_format='NHWC')
+        kernel_tf = tf.constant(
+            1.0 / (self.ds_factor * self.ds_factor),
+            shape=(self.ds_factor, self.ds_factor, 1, 1),
+            dtype=tf.float32,
+        )
+        image = tf.nn.conv2d(
+            truth,
+            filters=kernel_tf,
+            strides=[1, self.ds_factor, self.ds_factor, 1],
+            padding="VALID",
+            name="conv_debug",
+            data_format="NHWC",
+        )
         return image
 
     def __getitem__(self, idx):
         # Get batch at index idx
-        dates_batch = self.dates[idx*self.batch_size:(idx+1)*self.batch_size]
-        time_idx_batch = [0,1]#self.time_idxs[idx*self.batch_size:(idx+1)*self.batch_size]
+        dates_batch = self.dates[idx * self.batch_size : (idx + 1) * self.batch_size]
+        time_idx_batch = [
+            0,
+            1,
+        ]  # self.time_idxs[idx*self.batch_size:(idx+1)*self.batch_size]
 
         # Load and return this batch of data
         data_x_batch, data_y_batch, data_mask_batch = load_fcst_truth_batch(
@@ -99,7 +122,8 @@ class DataGenerator(Sequence):
             time_idx_batch,
             fcst_fields=self.fcst_fields,
             log_precip=self.log_precip,
-            norm=self.fcst_norm) ## note time_idx_batch is anyways redundant now in load_fcst_truth_batch
+            norm=self.fcst_norm,
+        )  ## note time_idx_batch is anyways redundant now in load_fcst_truth_batch
 
         if self.autocoarsen:
             # replace forecast data by coarsened truth data!
@@ -108,21 +132,22 @@ class DataGenerator(Sequence):
             data_x_batch = self._dataset_autocoarsener(truth_temp[..., np.newaxis])
 
         if self.constants is None:
-            return {"lo_res_inputs": data_x_batch},\
-                   {"output": data_y_batch,
-                    "mask": data_mask_batch}
+            return {"lo_res_inputs": data_x_batch}, {
+                "output": data_y_batch,
+                "mask": data_mask_batch,
+            }
         else:
-            return {"lo_res_inputs": data_x_batch,
-                    "hi_res_inputs": self.constants},\
-                   {"output": data_y_batch,
-                    "mask": data_mask_batch}
+            return {"lo_res_inputs": data_x_batch, "hi_res_inputs": self.constants}, {
+                "output": data_y_batch,
+                "mask": data_mask_batch,
+            }
 
     def shuffle_data(self, rng):
-        #assert len(self.time_idxs) == len(self.dates)
+        # assert len(self.time_idxs) == len(self.dates)
         # shuffle both dates and time index arrays the same way
         p = rng.permutation(len(self.dates))
         self.dates = self.dates[p]
-        #self.time_idxs = self.time_idxs[p]
+        # self.time_idxs = self.time_idxs[p]
 
     def on_epoch_end(self):
         if self.shuffle:

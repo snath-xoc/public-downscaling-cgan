@@ -6,8 +6,10 @@ from tensorflow.python.keras.layers.merge import _Merge
 
 def _compute_gradients(tensor, var_list):
     grads = tf.gradients(tensor, var_list)
-    return [grad if grad is not None else tf.zeros_like(var)
-            for var, grad in zip(var_list, grads)]
+    return [
+        grad if grad is not None else tf.zeros_like(var)
+        for var, grad in zip(var_list, grads)
+    ]
 
 
 class GradientPenalty(Layer):
@@ -17,7 +19,7 @@ class GradientPenalty(Layer):
     def call(self, inputs):
         target, wrt = inputs
         grad = _compute_gradients(target, [wrt])[0]
-        return K.sqrt(K.sum(K.batch_flatten(K.square(grad)), axis=1, keepdims=True))-1
+        return K.sqrt(K.sum(K.batch_flatten(K.square(grad)), axis=1, keepdims=True)) - 1
 
     def compute_output_shape(self, input_shapes):
         return (input_shapes[1][0], 1)
@@ -27,20 +29,24 @@ class RandomWeightedAverage(_Merge):
     def build(self, input_shape):
         super(RandomWeightedAverage, self).build(input_shape)
         if len(input_shape) != 2:
-            raise ValueError('A `RandomWeightedAverage` layer should be '
-                             'called on exactly 2 inputs')
+            raise ValueError(
+                "A `RandomWeightedAverage` layer should be "
+                "called on exactly 2 inputs"
+            )
 
     def _merge_function(self, inputs):
         if len(inputs) != 2:
-            raise ValueError('A `RandomWeightedAverage` layer should be '
-                             'called on exactly 2 inputs')
+            raise ValueError(
+                "A `RandomWeightedAverage` layer should be "
+                "called on exactly 2 inputs"
+            )
 
         x, y = inputs
         shape = K.shape(x)
         weights = K.random_uniform(shape[:1], 0, 1)
-        for i in range(len(K.int_shape(x))-1):
+        for i in range(len(K.int_shape(x)) - 1):
             weights = K.expand_dims(weights, -1)
-        return x*weights + y*(1-weights)
+        return x * weights + y * (1 - weights)
 
 
 class ReflectionPadding2D(Layer):
@@ -51,14 +57,14 @@ class ReflectionPadding2D(Layer):
     def compute_output_shape(self, s):
         return (
             s[0],
-            None if s[1] is None else s[1]+2*self.padding[0],
-            None if s[2] is None else s[2]+2*self.padding[1],
-            s[3]
+            None if s[1] is None else s[1] + 2 * self.padding[0],
+            None if s[2] is None else s[2] + 2 * self.padding[1],
+            s[3],
         )
 
     def call(self, x):
         i_pad, j_pad = self.padding
-        return tf.pad(x, [[0, 0], [i_pad, i_pad], [j_pad, j_pad], [0, 0]], 'REFLECT')
+        return tf.pad(x, [[0, 0], [i_pad, i_pad], [j_pad, j_pad], [0, 0]], "REFLECT")
 
 
 class SymmetricPadding2D(Layer):
@@ -69,11 +75,11 @@ class SymmetricPadding2D(Layer):
     def compute_output_shape(self, s):
         return (
             s[0],
-            None if s[1] is None else s[1]+2*self.padding[0],
-            None if s[2] is None else s[2]+2*self.padding[1],
-            s[3]
+            None if s[1] is None else s[1] + 2 * self.padding[0],
+            None if s[2] is None else s[2] + 2 * self.padding[1],
+            s[3],
         )
 
     def call(self, x):
         i_pad, j_pad = self.padding
-        return tf.pad(x, [[0, 0], [i_pad, i_pad], [j_pad, j_pad], [0, 0]], 'SYMMETRIC')
+        return tf.pad(x, [[0, 0], [i_pad, i_pad], [j_pad, j_pad], [0, 0]], "SYMMETRIC")

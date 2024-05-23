@@ -56,14 +56,14 @@ def compute_centred_coord_array(M, N):
     """
 
     if M % 2 == 1:
-        s1 = np.s_[-int(M / 2): int(M / 2) + 1]
+        s1 = np.s_[-int(M / 2) : int(M / 2) + 1]
     else:
-        s1 = np.s_[-int(M / 2): int(M / 2)]
+        s1 = np.s_[-int(M / 2) : int(M / 2)]
 
     if N % 2 == 1:
-        s2 = np.s_[-int(N / 2): int(N / 2) + 1]
+        s2 = np.s_[-int(N / 2) : int(N / 2) + 1]
     else:
-        s2 = np.s_[-int(N / 2): int(N / 2)]
+        s2 = np.s_[-int(N / 2) : int(N / 2)]
 
     YC, XC = np.ogrid[s1, s2]
 
@@ -226,7 +226,7 @@ def plot_spectrum1d(
     # Y-axis
     if y_units is not None:
         # { -> {{ with f-strings
-        power_units = fr"$10log_{{ 10 }}(\frac{{ {y_units}^2 }}{{ {x_units} }})$"
+        power_units = rf"$10log_{{ 10 }}(\frac{{ {y_units}^2 }}{{ {x_units} }})$"
         ax.set_ylabel(f"Power {power_units}")
 
     return ax

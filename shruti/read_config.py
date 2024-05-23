@@ -3,13 +3,15 @@ import os
 import sys
 import yaml
 
-#import tensorflow as tf
+# import tensorflow as tf
 
 
 def read_config():
-    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_config.yaml')
+    config_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "local_config.yaml"
+    )
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             try:
                 localconfig = yaml.safe_load(f)
             except yaml.YAMLError as e:
@@ -18,15 +20,19 @@ def read_config():
             return localconfig
     except FileNotFoundError as e:
         print(e)
-        print("You must set local_config.yaml in the main folder. Copy local_config-example.yaml and adjust appropriately.")
+        print(
+            "You must set local_config.yaml in the main folder. Copy local_config-example.yaml and adjust appropriately."
+        )
         sys.exit(1)
 
 
 def get_data_paths():
-    data_config_paths = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data_paths.yaml')
+    data_config_paths = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "data_paths.yaml"
+    )
 
     try:
-        with open(data_config_paths, 'r') as f:
+        with open(data_config_paths, "r") as f:
             try:
                 all_data_paths = yaml.safe_load(f)
             except yaml.YAMLError as e:
@@ -38,17 +44,19 @@ def get_data_paths():
         sys.exit(1)
 
     lc = read_config()
-    data_paths = all_data_paths[lc['data_paths']]
+    data_paths = all_data_paths[lc["data_paths"]]
     return data_paths
 
 
 def set_gpu_mode():
     lc = read_config()
-    if lc['use_gpu']:
-        os.environ.pop('CUDA_VISIBLE_DEVICES', None)  # remove environment variable (if it doesn't exist, nothing happens)
+    if lc["use_gpu"]:
+        os.environ.pop(
+            "CUDA_VISIBLE_DEVICES", None
+        )  # remove environment variable (if it doesn't exist, nothing happens)
         # set memory allocation to incremental if desired
-        if lc['gpu_mem_incr']:
-            gpus = tf.config.list_physical_devices('GPU')
+        if lc["gpu_mem_incr"]:
+            gpus = tf.config.list_physical_devices("GPU")
             if gpus:
                 try:
                     # Currently, memory growth needs to be the same across GPUs
@@ -60,7 +68,7 @@ def set_gpu_mode():
         else:
             # if gpu_mem_incr False, do nothing
             pass
-        if lc['disable_tf32']:
+        if lc["disable_tf32"]:
             tf.config.experimental.enable_tensor_float_32_execution(False)
     else:
         # if use_gpu False
@@ -68,15 +76,19 @@ def set_gpu_mode():
 
 
 def read_downscaling_factor():
-    df_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'downscaling_factor.yaml')
+    df_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "downscaling_factor.yaml"
+    )
     try:
-        with open(df_path, 'r') as f:
+        with open(df_path, "r") as f:
             try:
                 df = yaml.safe_load(f)
             except yaml.YAMLError as e:
                 print(e)
                 sys.exit(1)
-            assert math.prod(df["steps"]) == df["downscaling_factor"], "downscaling factor steps do not multiply to total downscaling factor!"
+            assert (
+                math.prod(df["steps"]) == df["downscaling_factor"]
+            ), "downscaling factor steps do not multiply to total downscaling factor!"
             return df
     except FileNotFoundError as e:
         print(e)

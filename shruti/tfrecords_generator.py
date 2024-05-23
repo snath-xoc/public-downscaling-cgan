@@ -12,47 +12,60 @@ from data import all_fcst_fields, denormalise, get_dates, HOURS
 
 data_paths = read_config.get_data_paths()
 records_folder = data_paths["TFRecords"]["tfrecords_path"]
+# print(data_paths["TFRecords"]["tfrecords_path"])
 ds_fac = read_config.read_downscaling_factor()["downscaling_factor"]
 
 CLASSES = 4
-DEFAULT_FCST_SHAPE = (128, 128, 4*len(all_fcst_fields))
+DEFAULT_FCST_SHAPE = (128, 128, 4 * len(all_fcst_fields))
 DEFAULT_CON_SHAPE = (128, 128, 2)
 DEFAULT_OUT_SHAPE = (128, 128, 1)
 
 
 def DataGenerator(years, batch_size, repeat=True, autocoarsen=False, weights=None):
-    return create_mixed_dataset(years, batch_size, repeat=repeat, autocoarsen=autocoarsen, weights=weights)
+    return create_mixed_dataset(
+        years, batch_size, repeat=repeat, autocoarsen=autocoarsen, weights=weights
+    )
 
 
-def create_mixed_dataset(years,
-                         batch_size,
-                         fcst_shape=DEFAULT_FCST_SHAPE,
-                         con_shape=DEFAULT_CON_SHAPE,
-                         out_shape=DEFAULT_OUT_SHAPE,
-                         repeat=True,
-                         autocoarsen=False,
-                         folder=records_folder,
-                         shuffle_size=64,
-                         weights=None):
-
+def create_mixed_dataset(
+    years,
+    batch_size,
+    fcst_shape=DEFAULT_FCST_SHAPE,
+    con_shape=DEFAULT_CON_SHAPE,
+    out_shape=DEFAULT_OUT_SHAPE,
+    repeat=True,
+    autocoarsen=False,
+    folder=records_folder,
+    shuffle_size=64,
+    weights=None,
+):
     if weights is None:
-        weights = [1./CLASSES]*CLASSES
-    datasets = [create_dataset(years,
-                               ii,
-                               fcst_shape=fcst_shape,
-                               con_shape=con_shape,
-                               out_shape=out_shape,
-                               folder=folder,
-                               shuffle_size=shuffle_size,
-                               repeat=repeat)
-                for ii in range(CLASSES)]
-    sampled_ds = tf.data.Dataset.sample_from_datasets(datasets,
-                                                      weights=weights).batch(batch_size)
+        weights = [1.0 / CLASSES] * CLASSES
+
+    datasets = [
+        create_dataset(
+            years,
+            ii,
+            fcst_shape=fcst_shape,
+            con_shape=con_shape,
+            out_shape=out_shape,
+            folder=folder,
+            shuffle_size=shuffle_size,
+            repeat=repeat,
+        )
+        for ii in range(CLASSES)
+    ]
+
+    sampled_ds = tf.data.Dataset.sample_from_datasets(datasets, weights=weights).batch(
+        batch_size
+    )
 
     if autocoarsen:
         sampled_ds = sampled_ds.map(_dataset_autocoarsener)
     sampled_ds = sampled_ds.prefetch(2)
+    print(sampled_ds)
     return sampled_ds
+
 
 # Note, if we wanted fewer classes, we can use glob syntax to grab multiple classes as once
 # e.g. create_dataset(2015,"[67]")
@@ -60,40 +73,56 @@ def create_mixed_dataset(years,
 
 
 def _dataset_autocoarsener(inputs, outputs):
-    image = outputs['output']
-    kernel_tf = tf.constant(1.0/(ds_fac*ds_fac), shape=(ds_fac, ds_fac, 1, 1), dtype=tf.float32)
-    image = tf.nn.conv2d(image, filters=kernel_tf, strides=[1, ds_fac, ds_fac, 1], padding='VALID',
-                         name='conv_debug', data_format='NHWC')
-    inputs['lo_res_inputs'] = image
+    image = outputs["output"]
+    kernel_tf = tf.constant(
+        1.0 / (ds_fac * ds_fac), shape=(ds_fac, ds_fac, 1, 1), dtype=tf.float32
+    )
+    image = tf.nn.conv2d(
+        image,
+        filters=kernel_tf,
+        strides=[1, ds_fac, ds_fac, 1],
+        padding="VALID",
+        name="conv_debug",
+        data_format="NHWC",
+    )
+    inputs["lo_res_inputs"] = image
     return inputs, outputs
 
 
-def _parse_batch(record_batch,
-                 insize=DEFAULT_FCST_SHAPE,
-                 consize=DEFAULT_CON_SHAPE,
-                 outsize=DEFAULT_OUT_SHAPE):
+def _parse_batch(
+    record_batch,
+    insize=DEFAULT_FCST_SHAPE,
+    consize=DEFAULT_CON_SHAPE,
+    outsize=DEFAULT_OUT_SHAPE,
+):
     # Create a description of the features
     feature_description = {
-        'generator_input': tf.io.FixedLenFeature(insize, tf.float32),
-        'constants': tf.io.FixedLenFeature(consize, tf.float32),
-        'generator_output': tf.io.FixedLenFeature(outsize, tf.float32),
+        "generator_input": tf.io.FixedLenFeature(insize, tf.float32),
+        "constants": tf.io.FixedLenFeature(consize, tf.float32),
+        "generator_output": tf.io.FixedLenFeature(outsize, tf.float32),
     }
 
     # Parse the input `tf.Example` proto using the dictionary above
     example = tf.io.parse_example(record_batch, feature_description)
-    return ({'lo_res_inputs': example['generator_input'],
-             'hi_res_inputs': example['constants']},
-            {'output': example['generator_output']})
+    return (
+        {
+            "lo_res_inputs": example["generator_input"],
+            "hi_res_inputs": example["constants"],
+        },
+        {"output": example["generator_output"]},
+    )
 
 
-def create_dataset(years,
-                   clss,
-                   fcst_shape=DEFAULT_FCST_SHAPE,
-                   con_shape=DEFAULT_CON_SHAPE,
-                   out_shape=DEFAULT_OUT_SHAPE,
-                   folder=records_folder,
-                   shuffle_size=64,
-                   repeat=True):
+def create_dataset(
+    years,
+    clss,
+    fcst_shape=DEFAULT_FCST_SHAPE,
+    con_shape=DEFAULT_CON_SHAPE,
+    out_shape=DEFAULT_OUT_SHAPE,
+    folder=records_folder,
+    shuffle_size=64,
+    repeat=True,
+):
     # TODO: tf.data.Dataset.list_files should accept the list of glob patterns,
     # not the list of globbed filenames
 
@@ -104,20 +133,26 @@ def create_dataset(years,
 
     # however, tried this on EWC and it was marginally slower!
     # But may want to change in future
+
     filelist = []
     for yr in years:
+        # print(yr)
         fpattern = os.path.join(folder, f"{yr}_*.{clss}.tfrecords")
         filelist += glob.glob(fpattern)
 
+    print(filelist)
     files_ds = tf.data.Dataset.list_files(filelist)
-    ds = tf.data.TFRecordDataset(files_ds,
-                                 compression_type="GZIP",
-                                 num_parallel_reads=tf.data.AUTOTUNE)
+    ds = tf.data.TFRecordDataset(
+        files_ds, compression_type="GZIP", num_parallel_reads=tf.data.AUTOTUNE
+    )
+    # print(ds)
     ds = ds.shuffle(shuffle_size)
-    ds = ds.map(lambda x: _parse_batch(x,
-                                       insize=fcst_shape,
-                                       consize=con_shape,
-                                       outsize=out_shape))
+    ds = ds.map(
+        lambda x: _parse_batch(
+            x, insize=fcst_shape, consize=con_shape, outsize=out_shape
+        )
+    )
+    print(ds)
     if repeat:
         return ds.repeat()
     else:
@@ -125,15 +160,17 @@ def create_dataset(years,
 
 
 # create_fixed_dataset currently unused; full image dataset used for validation
-def create_fixed_dataset(year=None,
-                         mode='validation',
-                         batch_size=16,
-                         autocoarsen=False,
-                         fcst_shape=DEFAULT_FCST_SHAPE,
-                         con_shape=DEFAULT_CON_SHAPE,
-                         out_shape=DEFAULT_OUT_SHAPE,
-                         name=None,
-                         folder=records_folder):
+def create_fixed_dataset(
+    year=None,
+    mode="validation",
+    batch_size=16,
+    autocoarsen=False,
+    fcst_shape=DEFAULT_FCST_SHAPE,
+    con_shape=DEFAULT_CON_SHAPE,
+    out_shape=DEFAULT_OUT_SHAPE,
+    name=None,
+    folder=records_folder,
+):
     assert year is not None or name is not None, "Must specify year or file name"
     if name is None:
         name = os.path.join(folder, f"{mode}{year}.tfrecords")
@@ -141,12 +178,12 @@ def create_fixed_dataset(year=None,
         name = os.path.join(folder, name)
     fl = glob.glob(name)
     files_ds = tf.data.Dataset.list_files(fl)
-    ds = tf.data.TFRecordDataset(files_ds,
-                                 num_parallel_reads=1)
-    ds = ds.map(lambda x: _parse_batch(x,
-                                       insize=fcst_shape,
-                                       consize=con_shape,
-                                       outsize=out_shape))
+    ds = tf.data.TFRecordDataset(files_ds, num_parallel_reads=1)
+    ds = ds.map(
+        lambda x: _parse_batch(
+            x, insize=fcst_shape, consize=con_shape, outsize=out_shape
+        )
+    )
     ds = ds.batch(batch_size)
     if autocoarsen:
         ds = ds.map(_dataset_autocoarsener)
@@ -157,15 +194,18 @@ def _float_feature(list_of_floats):  # float32
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
 
-def write_data(year,
-               folder=records_folder,
-               fcst_fields=all_fcst_fields,
-               img_chunk_width=DEFAULT_FCST_SHAPE[0],  # controls size of subsampled image
-               num_class=CLASSES,
-               log_precip=True,
-               fcst_norm=True):
+def write_data(
+    year,
+    folder=records_folder,
+    fcst_fields=all_fcst_fields,
+    img_chunk_width=DEFAULT_FCST_SHAPE[0],  # controls size of subsampled image
+    num_class=CLASSES,
+    log_precip=True,
+    fcst_norm=True,
+):
     from data_generator import DataGenerator as DataGeneratorFull
-    #assert isinstance(year, int)
+
+    # assert isinstance(year, int)
 
     # change this to your forecast image size!
     img_size_h = 384
@@ -178,32 +218,34 @@ def write_data(year,
     scaling_factor = ds_fac
 
     # chosen to approximately cover the full image, but can be changed!
-    nsamples = img_size_h*img_size_w//(img_chunk_width**2)
-    print("Samples per image:", nsamples)  # note, actual samples may be less than this if mask is used to exclude some
+    nsamples = img_size_h * img_size_w // (img_chunk_width**2)
+    print(
+        "Samples per image:", nsamples
+    )  # note, actual samples may be less than this if mask is used to exclude some
 
     # split TFRecords by lead time, in case this is useful for training on subsets of lead time
     for time_idx in range(28):
-
-        if time_idx>0:
+        if time_idx > 0:
             break
-            
-        print(f"Doing time index {time_idx}")
-        s_hour = time_idx*HOURS
-        e_hour = (time_idx + 1)*HOURS
-        dates = get_dates(year,
-                          start_hour=s_hour,
-                          end_hour=e_hour)
 
-        #print(dates)
-        dgc = DataGeneratorFull(dates,
-                                fcst_fields=fcst_fields,
-                                start_hour=s_hour,
-                                end_hour=e_hour,
-                                batch_size=1,
-                                log_precip=log_precip,
-                                shuffle=False,
-                                constants=True,
-                                fcst_norm=fcst_norm)
+        print(f"Doing time index {time_idx}")
+        s_hour = time_idx * HOURS
+        e_hour = (time_idx + 1) * HOURS
+        dates = get_dates(year, start_hour=s_hour, end_hour=e_hour)
+        dates = dates
+
+        # print(dates)
+        dgc = DataGeneratorFull(
+            dates,
+            fcst_fields=fcst_fields,
+            start_hour=s_hour,
+            end_hour=e_hour,
+            batch_size=1,
+            log_precip=log_precip,
+            shuffle=False,
+            constants=True,
+            fcst_norm=fcst_norm,
+        )
 
         fle_hdles = []
         for fh in range(num_class):
@@ -212,42 +254,50 @@ def write_data(year,
             options = tf.io.TFRecordOptions(compression_type="GZIP")
             fle_hdles.append(tf.io.TFRecordWriter(flename, options=options))
 
-        for batch in tqdm(range(len(dgc))):
+        for batch in range(len(dgc)):
+            print(batch)
             if (batch % 10) == 0:
                 print(time_idx, batch)
             sample = dgc.__getitem__(batch)
 
             for ii in range(nsamples):
                 # e.g. for image width 94 and img_chunk_width 20, can have 0:20 up to 74:94
-                idh = random.randint(0, img_size_h-img_chunk_width)
-                idw = random.randint(0, img_size_w-img_chunk_width)
+                idh = random.randint(0, img_size_h - img_chunk_width)
+                idw = random.randint(0, img_size_w - img_chunk_width)
 
-                mask = sample[1]['mask'][0,
-                                         idh*scaling_factor:(idh+img_chunk_width)*scaling_factor,
-                                         idw*scaling_factor:(idw+img_chunk_width)*scaling_factor].flatten()
+                mask = sample[1]["mask"][
+                    0,
+                    idh * scaling_factor : (idh + img_chunk_width) * scaling_factor,
+                    idw * scaling_factor : (idw + img_chunk_width) * scaling_factor,
+                ].flatten()
                 if np.any(mask):
                     # some of the truth data is invalid, so don't use this subsample
                     continue
 
-                truth = sample[1]['output'][0,
-                                            idh*scaling_factor:(idh+img_chunk_width)*scaling_factor,
-                                            idw*scaling_factor:(idw+img_chunk_width)*scaling_factor].flatten()
-                const = sample[0]['hi_res_inputs'][0,
-                                                   idh*scaling_factor:(idh+img_chunk_width)*scaling_factor,
-                                                   idw*scaling_factor:(idw+img_chunk_width)*scaling_factor,
-                                                   :].flatten()
-                forecast = sample[0]['lo_res_inputs'][0,
-                                                      idh:idh+img_chunk_width,
-                                                      idw:idw+img_chunk_width,
-                                                      :].flatten()
+                truth = sample[1]["output"][
+                    0,
+                    idh * scaling_factor : (idh + img_chunk_width) * scaling_factor,
+                    idw * scaling_factor : (idw + img_chunk_width) * scaling_factor,
+                ].flatten()
+                const = sample[0]["hi_res_inputs"][
+                    0,
+                    idh * scaling_factor : (idh + img_chunk_width) * scaling_factor,
+                    idw * scaling_factor : (idw + img_chunk_width) * scaling_factor,
+                    :,
+                ].flatten()
+                forecast = sample[0]["lo_res_inputs"][
+                    0, idh : idh + img_chunk_width, idw : idw + img_chunk_width, :
+                ].flatten()
                 feature = {
-                    'generator_input': _float_feature(forecast),
-                    'constants': _float_feature(const),
-                    'generator_output': _float_feature(truth)
+                    "generator_input": _float_feature(forecast),
+                    "constants": _float_feature(const),
+                    "generator_output": _float_feature(truth),
                 }
                 features = tf.train.Features(feature=feature)
                 example = tf.train.Example(features=features)
                 example_to_string = example.SerializeToString()
+
+                # print(example_to_string)
 
                 # decide which bin to put this sample in
                 truth_raw = denormalise(truth)  # undo log10(1+x) transformation
@@ -277,11 +327,17 @@ def save_dataset(tfrecords_dataset, flename, max_batches=None):
         if max_batches is not None:
             if ii == max_batches:
                 break
-        for k in range(sample[1]['output'].shape[0]):
+        for k in range(sample[1]["output"].shape[0]):
             feature = {
-                'generator_input': _float_feature(sample[0]['lo_res_inputs'][k, ...].numpy().flatten()),
-                'constants': _float_feature(sample[0]['hi_res_inputs'][k, ...].numpy().flatten()),
-                'generator_output': _float_feature(sample[1]['output'][k, ...].numpy().flatten())
+                "generator_input": _float_feature(
+                    sample[0]["lo_res_inputs"][k, ...].numpy().flatten()
+                ),
+                "constants": _float_feature(
+                    sample[0]["hi_res_inputs"][k, ...].numpy().flatten()
+                ),
+                "generator_output": _float_feature(
+                    sample[1]["output"][k, ...].numpy().flatten()
+                ),
             }
             features = tf.train.Features(feature=feature)
             example = tf.train.Example(features=features)
